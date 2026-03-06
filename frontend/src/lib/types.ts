@@ -1,4 +1,13 @@
-export type GameCategory = "popular" | "original";
+// ── Avatar ────────────────────────────────────────
+export interface AvatarConfig {
+  head: number; // 0-3  hair style
+  eyes: number; // 0-3  eye type
+  mouth: number; // 0-3  mouth type
+  color: number; // 0-7  palette
+}
+
+// ── Misc ─────────────────────────────────────────
+export type GameCategory = "popular" | "original" | "arcade";
 
 export interface GameInfo {
   id: string;
@@ -11,6 +20,7 @@ export interface GameInfo {
   color: string;
 }
 
+// ── Phase / Room ─────────────────────────────────
 export type Phase =
   | "home"
   | "lobby"
@@ -21,13 +31,19 @@ export type Phase =
   | "voting"
   | "matching"
   | "results"
-  | "scoreboard";
+  | "scoreboard"
+  // Arcade phases
+  | "trivia"
+  | "drawing"
+  | "word_bomb"
+  | "reaction";
 
 export interface Player {
   id: string;
   name: string;
   score: number;
   isHost: boolean;
+  avatar?: AvatarConfig;
   hasAnswered?: boolean;
   hasVoted?: boolean;
 }
@@ -57,4 +73,18 @@ export interface Room {
   answerCount: number;
   voteCount: number;
   roundResult: Record<string, unknown> | null;
+  // Trivia Blitz
+  triviaStartTime: number | null;
+  // Draw It
+  drawItDrawerId: string | null;
+  drawItGuessedIds: string[];
+  // Word Bomb
+  wordBombActiveId: string | null;
+  wordBombPattern: string | null;
+  wordBombLives: Record<string, number>;
+  wordBombMinFuse: number;
+  wordBombUsedWords: string[];
+  // Reaction Tap
+  reactionFired: boolean;
+  reactionTimes: Record<string, number>;
 }

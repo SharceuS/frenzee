@@ -29,14 +29,15 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
 
     return (
         <div className="page-fill overflow-y-auto gap-6 px-5 py-8">
-            {/* Trophy */}
+            {/* Trophy — overflow-visible so emoji doesn't get cut */}
             <motion.div
                 initial={{ scale: 0, rotate: -20 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 220, damping: 12 }}
-                className="text-center"
+                className="text-center overflow-visible"
+                style={{ overflowClipMargin: "unset" }}
             >
-                <div className="text-8xl animate-bounce-slow inline-block">🏆</div>
+                <div className="text-8xl animate-bounce-slow" style={{ lineHeight: 1.2, display: "inline-block" }}>🏆</div>
                 <h1 className="font-fredoka text-5xl text-white mt-2">Game Over!</h1>
                 {isWinner ? (
                     <p className="font-nunito text-yellow-400 font-extrabold text-lg mt-1">

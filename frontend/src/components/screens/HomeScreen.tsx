@@ -1,62 +1,69 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sfxTap, sfxSubmit } from "@/lib/sounds";
+import SvgAvatar, { AVATAR_PALETTES, HEAD_LABELS, EYES_LABELS, MOUTH_LABELS } from "@/components/SvgAvatar";
+import type { AvatarConfig } from "@/lib/types";
 
 interface Props {
-    onCreate: (name: string) => void;
-    onJoin: (code: string, name: string) => void;
+    onCreate: (name: string, avatar: AvatarConfig) => void;
+    onJoin: (code: string, name: string, avatar: AvatarConfig) => void;
 }
 
-const GAME_PREVIEWS = [
-    { emoji: "🕵️", title: "Guess the Liar", color: "#7C3AED", desc: "Catch the liar" },
-    { emoji: "🔥", title: "Hot Takes", color: "#EF4444", desc: "Minority wins" },
-    { emoji: "🤔", title: "Would You Rather", color: "#3B82F6", desc: "A or B?" },
-    { emoji: "🎭", title: "Roast Room", color: "#F97316", desc: "Funniest answer" },
-    { emoji: "✌️", title: "Two Truths", color: "#EC4899", desc: "Spot the lie" },
-    { emoji: "🏆", title: "Most Likely To", color: "#F59E0B", desc: "Vote the group" },
-    { emoji: "✏️", title: "Finish the Sentence", color: "#8B5CF6", desc: "Get creative" },
-    { emoji: "☠️", title: "Pick Your Poison", color: "#DC2626", desc: "No good options" },
-    { emoji: "🤫", title: "Confessions", color: "#7C3AED", desc: "Anonymous secrets" },
-    { emoji: "💬", title: "Whose Line?", color: "#3B82F6", desc: "Guess the author" },
-    { emoji: "⭐", title: "Rate That Take", color: "#A855F7", desc: "Wild opinions" },
-    { emoji: "🔗", title: "Word Association", color: "#10B981", desc: "Match the group" },
-    { emoji: "📖", title: "Emoji Story", color: "#EC4899", desc: "Emojis → story" },
-    { emoji: "🤪", title: "Unhinged Advice", color: "#F97316", desc: "Absurd scenarios" },
-    { emoji: "🏅", title: "Superlatives", color: "#F59E0B", desc: "Vote who fits" },
-    { emoji: "⚡", title: "This or That", color: "#06B6D4", desc: "Rapid fire" },
-    { emoji: "🙅", title: "Never Have I Ever", color: "#10B981", desc: "Confess it" },
-    { emoji: "🚩", title: "Red Flag Radar", color: "#DC2626", desc: "Red or green?" },
-    { emoji: "⚔️", title: "Debate Pit", color: "#06B6D4", desc: "Crowd votes" },
-    { emoji: "✨", title: "Vibe Check", color: "#8B5CF6", desc: "Match vibes" },
-    { emoji: "🔥", title: "Burn or Build", color: "#F59E0B", desc: "Scrap or keep" },
-    { emoji: "⚡", title: "Speed Round", color: "#EF4444", desc: "Yes or No?" },
-];
-
 const STATS = [
-    { value: "22", label: "Games" },
+    { value: "26", label: "Games" },
     { value: "∞", label: "Questions" },
     { value: "2-12", label: "Players" },
 ];
 
+const FEATURE_ROWS: { key: keyof AvatarConfig; label: string; options: string[] }[] = [
+    { key: "head", label: "Hair", options: HEAD_LABELS },
+    { key: "eyes", label: "Eyes", options: EYES_LABELS },
+    { key: "mouth", label: "Mouth", options: MOUTH_LABELS },
+];
+
+const LS_KEY = "frenzee_avatar";
+const LS_NAME_KEY = "frenzee_name";
+
 export default function HomeScreen({ onCreate, onJoin }: Props) {
     const [tab, setTab] = useState<"create" | "join">("create");
-    const [name, setName] = useState("");
+    const [name, setName] = useState(() => {
+        try { return localStorage.getItem(LS_NAME_KEY) ?? ""; } catch { return ""; }
+    });
     const [code, setCode] = useState("");
     const [shake, setShake] = useState(false);
+    const [pages, setPages] = useState<Record<string, number>>({ head: 0, eyes: 0, mouth: 0 });
+    const [avatar, setAvatar] = useState<AvatarConfig>(() => {
+        try {
+            const saved = localStorage.getItem(LS_KEY);
+            return saved ? (JSON.parse(saved) as AvatarConfig) : { head: 0, eyes: 0, mouth: 0, color: 0 };
+        } catch { return { head: 0, eyes: 0, mouth: 0, color: 0 }; }
+    });
     const nameRef = useRef<HTMLInputElement>(null);
 
-    const triggerShake = () => {
-        setShake(true);
-        setTimeout(() => setShake(false), 500);
+    // Persist avatar to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem(LS_KEY, JSON.stringify(avatar));
+    }, [avatar]);
+
+    // Persist name
+    useEffect(() => {
+        localStorage.setItem(LS_NAME_KEY, name);
+    }, [name]);
+
+    const setFeature = (key: keyof AvatarConfig, val: number) => {
+        sfxTap();
+        setAvatar(a => ({ ...a, [key]: val }));
     };
 
+    const triggerShake = () => { setShake(true); setTimeout(() => setShake(false), 500); };
+
     const handleCreate = () => {
-        if (name.trim()) { sfxSubmit(); onCreate(name.trim()); }
+        if (name.trim()) { sfxSubmit(); onCreate(name.trim(), avatar); }
         else { triggerShake(); nameRef.current?.focus(); }
     };
     const handleJoin = () => {
-        if (name.trim() && code.trim().length === 4) { sfxSubmit(); onJoin(code.trim(), name.trim()); }
+        if (name.trim() && code.trim().length === 4) { sfxSubmit(); onJoin(code.trim(), name.trim(), avatar); }
         else { triggerShake(); nameRef.current?.focus(); }
     };
 
@@ -77,17 +84,14 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                         🎉
                     </div>
                 </div>
-                <h1 className="font-fredoka leading-none mb-1" style={{ fontSize: "clamp(2.8rem, 10vw, 3.6rem)" }}>
-                    <span className="text-white">Pocket</span>
-                    <br />
+                <h1 className="font-fredoka leading-none mb-1 whitespace-nowrap" style={{ fontSize: "clamp(2.6rem, 9vw, 3.4rem)" }}>
                     <span style={{
                         background: "linear-gradient(135deg, #FBBF24, #F472B6, #A78BFA)",
                         WebkitBackgroundClip: "text",
                         WebkitTextFillColor: "transparent",
                         backgroundClip: "text",
-                    }}>
-                        Party!
-                    </span>
+                    }}>Frenzee</span>
+                    <span className="text-white"> 🎉</span>
                 </h1>
                 <p className="font-nunito text-white/50 text-sm font-600">
                     The ultimate party game for your phone 🕹️
@@ -104,26 +108,6 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                 </div>
             </motion.div>
 
-            {/* ── Game Carousel Preview ──── */}
-            <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-                className="w-full overflow-hidden"
-                style={{ maskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)" }}
-            >
-                <div className="home-ticker flex gap-2">
-                    {[...GAME_PREVIEWS, ...GAME_PREVIEWS].map((g, i) => (
-                        <div key={i} className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-2xl border border-white/10"
-                            style={{ background: g.color + "18" }}>
-                            <span className="text-xl">{g.emoji}</span>
-                            <div>
-                                <div className="font-fredoka text-white text-sm leading-none">{g.title}</div>
-                                <div className="font-nunito text-white/40 text-xs">{g.desc}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </motion.div>
-
             {/* ── Create / Join Card ───────── */}
             <motion.div
                 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
@@ -132,16 +116,12 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                 {/* Tab switcher */}
                 <div className="home-tab-row flex gap-1 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.05)" }}>
                     {(["create", "join"] as const).map(t => (
-                        <button
-                            key={t}
-                            onClick={() => { sfxTap(); setTab(t); }}
+                        <button key={t} onClick={() => { sfxTap(); setTab(t); }}
                             className="flex-1 py-2.5 rounded-xl font-fredoka text-lg transition-all duration-200"
                             style={tab === t ? {
                                 background: "linear-gradient(135deg, #7C3AED, #EC4899)",
-                                color: "white",
-                                boxShadow: "0 4px 16px rgba(124,58,237,0.5)"
-                            } : { color: "rgba(255,255,255,0.4)" }}
-                        >
+                                color: "white", boxShadow: "0 4px 16px rgba(124,58,237,0.5)"
+                            } : { color: "rgba(255,255,255,0.4)" }}>
                             {t === "create" ? "🏠 Host" : "🔑 Join"}
                         </button>
                     ))}
@@ -167,17 +147,128 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                     />
                 </div>
 
+                {/* ── Avatar Picker ───────────────────── */}
+                <div>
+                    {/* Divider */}
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+                        <span className="font-nunito font-800 text-white/40 text-xs uppercase tracking-widest">Your Look</span>
+                        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+                    </div>
+
+                    {/* Live preview */}
+                    <div className="flex justify-center mb-4">
+                        <motion.div
+                            className="relative"
+                            key={`${avatar.color}-${avatar.head}-${avatar.eyes}-${avatar.mouth}`}
+                            initial={{ scale: 0.85, opacity: 0.7 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                        >
+                            <div className="w-20 h-20 rounded-[28px] overflow-hidden ring-4 ring-white/20 shadow-2xl">
+                                <SvgAvatar config={avatar} size={80} />
+                            </div>
+                            {name.trim() && (
+                                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap
+                                    font-fredoka text-white text-xs px-2.5 py-0.5 rounded-full"
+                                    style={{ background: AVATAR_PALETTES[avatar.color % 8].bg1 }}>
+                                    {name.trim()}
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+
+                    {/* Color swatches */}
+                    <div className="flex justify-center gap-2 mb-4 flex-wrap">
+                        {AVATAR_PALETTES.map((p, i) => (
+                            <button key={i}
+                                onClick={() => setFeature("color", i)}
+                                className="w-8 h-8 rounded-full transition-all duration-150 active:scale-90"
+                                style={{
+                                    background: `linear-gradient(135deg, ${p.bg1}, ${p.bg2})`,
+                                    boxShadow: avatar.color === i
+                                        ? `0 0 0 3px white, 0 0 0 5px ${p.bg1}`
+                                        : "none",
+                                    transform: avatar.color === i ? "scale(1.15)" : "scale(1)",
+                                }}
+                            />
+                        ))}
+                    </div>
+
+                    {/* Feature rows: hair / eyes / mouth */}
+                    <div className="flex flex-col gap-3">
+                        {FEATURE_ROWS.map(({ key, label, options }) => {
+                            const page = pages[key] ?? 0;
+                            const start = page * 4;
+                            return (
+                                <div key={key}>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <div className="font-nunito text-white/45 text-[10px] uppercase tracking-widest">{label}</div>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => { sfxTap(); setPages(p => ({ ...p, [key]: 0 })); }}
+                                                className="w-6 h-6 flex items-center justify-center rounded-lg transition-all"
+                                                style={{
+                                                    opacity: page > 0 ? 1 : 0.2, pointerEvents: page > 0 ? "auto" : "none",
+                                                    background: "rgba(255,255,255,0.08)"
+                                                }}>
+                                                <span className="text-white text-xs">‹</span>
+                                            </button>
+                                            <span className="font-nunito text-white/25 text-[10px]">{page + 1}/2</span>
+                                            <button
+                                                onClick={() => { sfxTap(); setPages(p => ({ ...p, [key]: 1 })); }}
+                                                className="w-6 h-6 flex items-center justify-center rounded-lg transition-all"
+                                                style={{
+                                                    opacity: page < 1 ? 1 : 0.2, pointerEvents: page < 1 ? "auto" : "none",
+                                                    background: "rgba(255,255,255,0.08)"
+                                                }}>
+                                                <span className="text-white text-xs">›</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {options.slice(start, start + 4).map((optLabel, i) => {
+                                            const idx = start + i;
+                                            const optAvatar: AvatarConfig = { ...avatar, [key]: idx };
+                                            const isSelected = avatar[key] === idx;
+                                            return (
+                                                <button key={idx}
+                                                    onClick={() => setFeature(key, idx)}
+                                                    className="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition-all duration-150 active:scale-95"
+                                                    style={{
+                                                        background: isSelected
+                                                            ? `linear-gradient(135deg, ${AVATAR_PALETTES[avatar.color % 8].bg1}44, ${AVATAR_PALETTES[avatar.color % 8].bg2}33)`
+                                                            : "rgba(255,255,255,0.05)",
+                                                        border: isSelected
+                                                            ? `1.5px solid ${AVATAR_PALETTES[avatar.color % 8].bg1}88`
+                                                            : "1.5px solid rgba(255,255,255,0.08)",
+                                                    }}>
+                                                    <div className="w-8 h-8 rounded-xl overflow-hidden">
+                                                        <SvgAvatar config={optAvatar} size={32} />
+                                                    </div>
+                                                    <span className="font-nunito text-[9px] leading-none"
+                                                        style={{ color: isSelected ? "white" : "rgba(255,255,255,0.35)" }}>
+                                                        {optLabel.split(" ")[0]}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
                 {/* Room code (join only) */}
                 <AnimatePresence>
                     {tab === "join" && (
-                        <motion.div
-                            key="code-input"
+                        <motion.div key="code-input"
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                        >
+                            className="overflow-hidden">
                             <label className="font-nunito font-800 text-white/60 text-xs uppercase tracking-widest mb-1.5 block">
                                 Room Code
                             </label>
@@ -199,8 +290,7 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                 <motion.button
                     className="btn-primary w-full text-xl"
                     onClick={tab === "create" ? handleCreate : handleJoin}
-                    whileTap={{ scale: 0.96 }}
-                >
+                    whileTap={{ scale: 0.96 }}>
                     {tab === "create" ? "🚀 Create Room" : "🎮 Join Game"}
                 </motion.button>
 
@@ -209,22 +299,24 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                 </p>
             </motion.div>
 
-            {/* ── Game count badge ─────────── */}
+            {/* ── Game count badges (1 compact row) ───────────── */}
             <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-                className="w-full flex flex-wrap gap-2 justify-center pb-4"
+                className="w-full flex items-center justify-center gap-2 pb-4"
             >
                 {[
-                    { label: "🏆 Popular", count: 10 },
-                    { label: "✨ Original", count: 12 },
+                    { icon: "⭐", label: "Popular", count: 10, color: "#7C3AED" },
+                    { icon: "✨", label: "Original", count: 12, color: "#EC4899" },
+                    { icon: "🎮", label: "Arcade", count: 4, color: "#10B981" },
                 ].map(cat => (
-                    <div key={cat.label} className="flex items-center gap-2 px-4 py-2 rounded-2xl glass-card">
-                        <span className="font-fredoka text-white text-base">{cat.label}</span>
-                        <span className="font-nunito font-800 text-white/40 text-xs">{cat.count} games</span>
+                    <div key={cat.label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl"
+                        style={{ background: cat.color + "22", border: `1px solid ${cat.color}44` }}>
+                        <span className="text-sm">{cat.icon}</span>
+                        <span className="font-fredoka text-white text-sm leading-none">{cat.label}</span>
+                        <span className="font-nunito text-white/40 text-[10px] leading-none">{cat.count}</span>
                     </div>
                 ))}
             </motion.div>
         </div>
     );
 }
-

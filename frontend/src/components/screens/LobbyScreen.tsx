@@ -3,6 +3,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Room } from "@/lib/types";
 import GameInfoModal from "@/components/GameInfoModal";
+import SvgAvatar, { defaultAvatarFromId } from "@/components/SvgAvatar";
 import { sfxTap, sfxSelect } from "@/lib/sounds";
 
 interface Props {
@@ -13,16 +14,11 @@ interface Props {
     onStart: (maxRounds: number) => void;
 }
 
-const AVATAR_COLORS = [
-    "from-violet-500 to-purple-600",
-    "from-pink-500 to-rose-600",
-    "from-amber-400 to-orange-500",
-    "from-emerald-400 to-teal-500",
-    "from-sky-400 to-blue-500",
-    "from-fuchsia-400 to-pink-500",
-    "from-cyan-400 to-blue-400",
-    "from-lime-400 to-green-500",
-];
+const CAT_META = {
+    popular: { icon: "⭐", label: "Popular" },
+    original: { icon: "✨", label: "Original" },
+    arcade: { icon: "🎮", label: "Arcade" },
+} as const;
 
 const ALL_GAMES = [
     // ─── Popular ───
@@ -291,15 +287,68 @@ const ALL_GAMES = [
         scoring: "+100 pts for each correct attribution. +150 pts if nobody guesses yours.",
         minPlayers: 3, maxPlayers: 10, duration: "3–5 min",
     },
+    // ─── Arcade ───
+    {
+        id: "trivia_blitz", emoji: "🧠", title: "Trivia Blitz", desc: "Kahoot vibes!",
+        color: "#8B5CF6", cat: "arcade",
+        rules: [
+            "A question appears with 4 coloured options (A/B/C/D).",
+            "A 20-second countdown starts — answer before it hits zero!",
+            "Faster correct answers earn more points (up to 1000).",
+            "Wrong answers or no answer = 0 points for that round.",
+        ],
+        scoring: "Speed bonus: 400–1000 pts per correct answer. Instant answers = max score!",
+        minPlayers: 2, maxPlayers: 12, duration: "~30 sec/round",
+    },
+    {
+        id: "draw_it", emoji: "🎨", title: "Draw It!", desc: "Scribble & guess",
+        color: "#F59E0B", cat: "arcade",
+        rules: [
+            "One player draws a secret word on the canvas.",
+            "Others type in guesses in real-time as they figure it out.",
+            "First to guess correctly gets the most points.",
+            "The drawer earns points for every correct guess.",
+            "Next round, a different player draws.",
+        ],
+        scoring: "Guesser: 500–100 pts (by order). Drawer: +50 pts per correct guess.",
+        minPlayers: 3, maxPlayers: 8, duration: "~75 sec/round",
+    },
+    {
+        id: "word_bomb", emoji: "💣", title: "Word Bomb", desc: "Type before boom!",
+        color: "#EF4444", cat: "arcade",
+        rules: [
+            "A letter pattern appears — e.g. 'ANG'.",
+            "Hot-seat: one player must type a valid word containing that pattern.",
+            "You have a ticking fuse to answer — fail and the bomb explodes!",
+            "Fuse gets shorter each successful pass.",
+            "Lose 2 lives and you're out. Last one standing wins.",
+        ],
+        scoring: "+50 pts per successful word. +300 pts for the survivor. +50 pts per life remaining.",
+        minPlayers: 3, maxPlayers: 10, duration: "3–6 min",
+    },
+    {
+        id: "reaction_tap", emoji: "⚡", title: "Reaction Tap", desc: "Fastest wins!",
+        color: "#10B981", cat: "arcade",
+        rules: [
+            "Everyone stares at the screen. Don't touch it yet.",
+            "After a random delay, the screen flashes GREEN.",
+            "TAP as fast as humanly possible the instant you see it!",
+            "Tapping before the flash = shame and no points.",
+            "Ranked by reaction time — fastest gets 1000 pts.",
+        ],
+        scoring: "1st: 1000 pts · 2nd: 800 pts · 3rd: 600 pts · Others: 300 pts.",
+        minPlayers: 2, maxPlayers: 12, duration: "~15 sec/round",
+    },
 ];
 
 export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart }: Props) {
     const [rounds, setRounds] = useState(5);
-    const [tab, setTab] = useState<"popular" | "original">("popular");
+    const [tab, setTab] = useState<"popular" | "original" | "arcade">("popular");
     const [infoGame, setInfoGame] = useState<typeof ALL_GAMES[0] | null>(null);
     const selected = room.gameType;
     const canStart = room.players.length >= 2 && !!selected;
     const filtered = ALL_GAMES.filter(g => g.cat === tab);
+    const meta = CAT_META[tab];
 
     return (
         <>
@@ -322,19 +371,24 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 </div>
 
                 {/* ─── Players row ─── */}
-                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0 scroll-y" style={{ scrollbarWidth: "none" }}>
+                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0" style={{ scrollbarWidth: "none" }}>
                     <AnimatePresence mode="popLayout">
                         {room.players.map((p, i) => (
                             <motion.div key={p.id}
-                                initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0, opacity: 0 }} transition={{ delay: i * 0.04, type: "spring", stiffness: 300 }}
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0, opacity: 0 }}
+                                transition={{ delay: i * 0.04, type: "spring", stiffness: 300 }}
                                 className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                                <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]}
-                                  flex items-center justify-center font-fredoka text-lg text-white
-                                  ${p.isHost ? "ring-2 ring-yellow-400 ring-offset-1 ring-offset-transparent" : ""}`}>
-                                    {p.name[0].toUpperCase()}
+                                {/* overflow-hidden + fixed size prevents the avatar SVG from being clipped/cut */}
+                                <div className={`w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 ${p.isHost ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-black" : ""
+                                    }`}>
+                                    <SvgAvatar
+                                        config={p.avatar ?? defaultAvatarFromId(p.id)}
+                                        size={48}
+                                    />
                                 </div>
-                                <span className="font-nunito text-xs text-white/55 leading-none max-w-[44px] truncate text-center">
+                                <span className="font-nunito text-xs text-white/55 leading-none max-w-[48px] truncate text-center">
                                     {p.id === myId ? "you" : p.name.split(" ")[0]}
                                 </span>
                             </motion.div>
@@ -343,67 +397,94 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 </div>
 
                 {/* ─── Category tabs ─── */}
-                <div className="flex items-center justify-between mt-3 mb-2 flex-shrink-0">
-                    <span className="font-fredoka text-white text-lg">
+                <div className="flex items-center justify-between mt-2 mb-3 flex-shrink-0">
+                    <span className="font-fredoka text-white text-base">
                         {isHost ? "Pick a Game" : "Game Selection"}
                     </span>
                     <div className="flex gap-1 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.07)" }}>
-                        {(["popular", "original"] as const).map(t => (
+                        {(["popular", "original", "arcade"] as const).map(t => (
                             <button key={t}
                                 onClick={() => { sfxTap(); setTab(t); }}
-                                className="font-nunito font-800 text-xs px-3 py-1.5 rounded-xl capitalize transition-all duration-200"
-                                style={tab === t ? { background: "rgba(255,255,255,0.15)", color: "white" } : { color: "rgba(255,255,255,0.35)" }}>
-                                {t === "popular" ? "⭐ Popular" : "✨ Original"}
+                                className="font-nunito font-800 text-xs px-2.5 py-1.5 rounded-xl transition-all duration-200"
+                                style={tab === t
+                                    ? { background: "rgba(255,255,255,0.15)", color: "white" }
+                                    : { color: "rgba(255,255,255,0.35)" }}>
+                                {CAT_META[t].icon} {CAT_META[t].label}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* ─── Game list ─── */}
-                <div className="flex-1 scroll-y flex flex-col gap-2 pb-2">
-                    <AnimatePresence mode="popLayout">
-                        {filtered.map((g, i) => (
-                            <motion.div
-                                key={g.id}
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.03 }}
-                                className={`game-tile flex items-center gap-3 ${selected === g.id ? "selected-game" : ""}`}
-                                style={{ borderColor: selected === g.id ? g.color + "99" : undefined }}
-                            >
-                                {/* Emoji + text — tap to select */}
-                                <button
-                                    className="flex items-center gap-3 flex-1 text-left"
-                                    onClick={() => {
-                                        if (!isHost) return;
-                                        sfxSelect();
-                                        onSelectGame(g.id);
-                                    }}
-                                >
-                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-                                        style={{ background: g.color + "22", border: `1.5px solid ${g.color}33` }}>
-                                        {g.emoji}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="font-fredoka text-white text-base leading-tight">{g.title}</div>
-                                        <div className="font-nunito text-white/45 text-xs leading-snug">{g.desc}</div>
-                                    </div>
-                                    {selected === g.id && (
-                                        <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                                            style={{ background: g.color }}>
-                                            <span className="text-white text-xs">✓</span>
-                                        </div>
-                                    )}
-                                </button>
+                {/* ─── Game grid (2-col) — AnimatePresence only on TAB change, not on game select ─── */}
+                <div className="flex-1 scroll-y pb-2 min-h-0 -mx-1">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={tab}
+                            initial={{ opacity: 0, x: 14 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -14 }}
+                            transition={{ duration: 0.15 }}
+                            className="px-1 pt-1"
+                        >
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-xl">{meta.icon}</span>
+                                <span className="font-fredoka text-white/70 text-base">{meta.label}</span>
+                                <span className="font-nunito text-white/30 text-xs ml-1">{filtered.length} games</span>
+                            </div>
 
-                                {/* Info button */}
-                                <button
-                                    onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
-                                    className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-90"
-                                    style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.45)" }}>
-                                    ℹ️
-                                </button>
-                            </motion.div>
-                        ))}
+                            <div className="grid grid-cols-2 gap-3">
+                                {filtered.map(g => {
+                                    const isSelected = selected === g.id;
+                                    return (
+                                        <div key={g.id}
+                                            className="relative flex flex-col rounded-2xl overflow-hidden"
+                                            style={{
+                                                background: isSelected ? g.color + "26" : "rgba(255,255,255,0.05)",
+                                                border: `1.5px solid ${isSelected ? g.color + "88" : "rgba(255,255,255,0.08)"}`,
+                                                boxShadow: isSelected ? `0 0 22px ${g.color}44` : "none",
+                                                transition: "background 0.18s, border-color 0.18s, box-shadow 0.18s",
+                                            }}>
+                                            {/* Tap zone */}
+                                            <button
+                                                className="flex flex-col items-center pt-5 pb-3 px-2 text-center w-full active:scale-95 transition-transform"
+                                                onClick={() => {
+                                                    if (!isHost) return;
+                                                    sfxSelect();
+                                                    onSelectGame(g.id);
+                                                }}>
+                                                <div className="text-4xl mb-2"
+                                                    style={{ filter: isSelected ? `drop-shadow(0 2px 12px ${g.color})` : "none" }}>
+                                                    {g.emoji}
+                                                </div>
+                                                <div className="font-fredoka text-white text-sm leading-tight">{g.title}</div>
+                                                <div className="font-nunito text-white/40 text-[10px] mt-0.5 leading-snug">{g.desc}</div>
+                                            </button>
+
+                                            {/* Bottom color bar */}
+                                            <div className="h-1 w-full flex-shrink-0"
+                                                style={{ background: g.color + (isSelected ? "cc" : "55") }} />
+
+                                            {/* Info button */}
+                                            <button
+                                                onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
+                                                className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full text-[10px]"
+                                                style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}>
+                                                ℹ
+                                            </button>
+
+                                            {/* Selected check */}
+                                            {isSelected && (
+                                                <div className="absolute top-2 left-2 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                                                    style={{ background: g.color }}>
+                                                    ✓
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </motion.div>
                     </AnimatePresence>
                 </div>
 
@@ -411,7 +492,6 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 <div className="flex-shrink-0 pt-3 pb-2">
                     {isHost ? (
                         <div className="flex gap-3 items-center">
-                            {/* Rounds stepper */}
                             <div className="flex items-center gap-2 px-3 py-2 rounded-2xl flex-shrink-0"
                                 style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
                                 <button onClick={() => { sfxTap(); setRounds(r => Math.max(2, r - 1)); }}
@@ -425,12 +505,10 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                                     className="w-7 h-7 rounded-xl flex items-center justify-center font-fredoka text-white text-lg active:scale-90 transition-transform"
                                     style={{ background: "rgba(255,255,255,0.1)" }}>+</button>
                             </div>
-
                             <button
-                                className={`btn-primary flex-1 ${!canStart ? "opacity-40 pointer-events-none" : ""}`}
-                                onClick={() => { sfxTap(); onStart(rounds); }}
-                            >
-                                {!selected ? "Pick a game" : room.players.length < 2 ? "Need 2+ players" : "🎮 Start!"}
+                                className={`btn-primary flex-1 ${canStart ? "" : "opacity-40 pointer-events-none"}`}
+                                onClick={() => { sfxTap(); onStart(rounds); }}>
+                                {selected ? (room.players.length < 2 ? "Need 2+ players" : "🎮 Start!") : "Pick a game"}
                             </button>
                         </div>
                     ) : (
@@ -441,9 +519,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 </div>
             </div>
 
-            {/* Info modal */}
             <GameInfoModal game={infoGame} onClose={() => setInfoGame(null)} />
         </>
     );
 }
-

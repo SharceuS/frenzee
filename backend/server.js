@@ -26,6 +26,9 @@ const {
   RATE_THAT_TAKE,
   SUPERLATIVES,
   WHOSE_LINE_PROMPTS,
+  TRIVIA_BLITZ,
+  DRAW_IT_WORDS,
+  WORD_BOMB_PATTERNS,
 } = require("./data/questions");
 
 const app = express();
@@ -261,6 +264,47 @@ const GAME_CATALOGUE = {
     maxPlayers: 10,
     color: "#3B82F6",
   },
+  // ── ARCADE GAMES ──────────────────────────────────────────────────────────
+  trivia_blitz: {
+    id: "trivia_blitz",
+    title: "Trivia Blitz",
+    emoji: "🧠",
+    description: "Kahoot-style! 4 answers, 20 seconds. Speed = more points.",
+    category: "arcade",
+    minPlayers: 2,
+    maxPlayers: 12,
+    color: "#8B5CF6",
+  },
+  draw_it: {
+    id: "draw_it",
+    title: "Draw It!",
+    emoji: "🎨",
+    description: "Draw a secret word. Others race to guess it in real-time.",
+    category: "arcade",
+    minPlayers: 3,
+    maxPlayers: 8,
+    color: "#F59E0B",
+  },
+  word_bomb: {
+    id: "word_bomb",
+    title: "Word Bomb",
+    emoji: "💣",
+    description: "Type a word with the pattern before the bomb explodes!",
+    category: "arcade",
+    minPlayers: 3,
+    maxPlayers: 10,
+    color: "#EF4444",
+  },
+  reaction_tap: {
+    id: "reaction_tap",
+    title: "Reaction Tap",
+    emoji: "⚡",
+    description: "Screen flashes — tap instantly. Fastest reflexes win!",
+    category: "arcade",
+    minPlayers: 2,
+    maxPlayers: 12,
+    color: "#10B981",
+  },
 };
 
 app.get("/catalogue", (_, res) => res.json(GAME_CATALOGUE));
@@ -278,7 +322,7 @@ function genCode() {
   return s;
 }
 
-function createRoom(hostId, hostName) {
+function createRoom(hostId, hostName, avatar) {
   let code;
   do {
     code = genCode();
@@ -286,7 +330,15 @@ function createRoom(hostId, hostName) {
   rooms[code] = {
     code,
     host: hostId,
-    players: [{ id: hostId, name: hostName, score: 0, isHost: true }],
+    players: [
+      {
+        id: hostId,
+        name: hostName,
+        avatar: avatar || null,
+        score: 0,
+        isHost: true,
+      },
+    ],
     phase: "lobby",
     gameType: null,
     round: 0,
@@ -346,6 +398,7 @@ function sanitize(room) {
       name: p.name,
       score: p.score,
       isHost: p.isHost,
+      avatar: p.avatar || null,
       hasAnswered: room.answers[p.id] !== undefined,
       hasVoted: room.votes[p.id] !== undefined,
     })),
@@ -364,6 +417,20 @@ function sanitize(room) {
     answerCount: Object.keys(room.answers).length,
     voteCount: Object.keys(room.votes).length,
     roundResult: room.roundResult,
+    // Trivia Blitz
+    triviaStartTime: room.triviaStartTime ?? null,
+    // Draw It
+    drawItDrawerId: room.drawItDrawerId ?? null,
+    drawItGuessedIds: room.drawItGuessedIds ?? [],
+    // Word Bomb
+    wordBombActiveId: room.wordBombActiveId ?? null,
+    wordBombPattern: room.wordBombPattern ?? null,
+    wordBombLives: room.wordBombLives ?? {},
+    wordBombMinFuse: room.wordBombMinFuse ?? 8,
+    wordBombUsedWords: room.wordBombUsedWords ?? [],
+    // Reaction Tap
+    reactionFired: room.reactionFired ?? false,
+    reactionTimes: room.reactionTimes ?? {},
   };
 }
 
@@ -416,6 +483,59 @@ function checkAllVoted(room) {
 }
 function checkAllMatched(room) {
   return room.players.every((p) => room.matchGuesses[p.id] !== undefined);
+}
+
+// ══════════════════════════════════════
+// WORD BOMB HELPERS
+// ══════════════════════════════════════
+function getNextAliveBombPlayer(room, currentId) {
+  const alive = room.players.filter((p) => (room.wordBombLives[p.id] || 0) > 0);
+  if (alive.length <= 1) return null;
+  const idx = alive.findIndex((p) => p.id === currentId);
+  return alive[(idx + 1) % alive.length];
+}
+
+function startBombTimer(room) {
+  if (room._bombTimer) clearTimeout(room._bombTimer);
+  const fuse = (room.wordBombMinFuse || 8) * 1000;
+  room._bombTimer = setTimeout(() => {
+    if (!getRoom(room.code) || room.phase !== "word_bomb") return;
+    // Bomb exploded! Active player loses a life
+    const activeId = room.wordBombActiveId;
+    if (activeId && room.wordBombLives[activeId] !== undefined) {
+      room.wordBombLives[activeId] = Math.max(
+        0,
+        room.wordBombLives[activeId] - 1,
+      );
+      io.to(room.code).emit("bomb_exploded", { playerId: activeId });
+    }
+    // Check if only one player alive
+    const alive = room.players.filter(
+      (p) => (room.wordBombLives[p.id] || 0) > 0,
+    );
+    if (alive.length <= 1) {
+      resolveRound(room);
+      return;
+    }
+    // Pass to next alive player, new pattern if round is getting long
+    const next = getNextAliveBombPlayer(room, activeId);
+    if (!next) {
+      resolveRound(room);
+      return;
+    }
+    room.wordBombActiveId = next.id;
+    // New pattern every ~5 passes
+    room._bombPassCount = (room._bombPassCount || 0) + 1;
+    if (room._bombPassCount % 5 === 0) {
+      room.wordBombPattern =
+        WORD_BOMB_PATTERNS[
+          Math.floor(Math.random() * WORD_BOMB_PATTERNS.length)
+        ];
+      room.wordBombUsedWords = [];
+    }
+    broadcast(room.code);
+    startBombTimer(room);
+  }, fuse);
 }
 
 // ══════════════════════════════════════
@@ -643,6 +763,72 @@ function startRound(room) {
     setTimeout(() => {
       if (getRoom(room.code)) advanceTo(room, "answering");
     }, 4000);
+  }
+  // ── ARCADE GAMES ──────────────────────────────────────────────────────────
+  else if (gt === "trivia_blitz") {
+    const q = pickQ(TRIVIA_BLITZ, room);
+    room.currentQuestion = q.q;
+    room.questionData = {
+      options: q.options,
+      correctIndex: q.correct,
+      category: q.cat,
+    };
+    room.triviaAnswerTimes = {};
+    room.triviaStartTime = Date.now();
+    room.phase = "trivia";
+    broadcast(room.code);
+    // Auto-resolve after 20 seconds
+    room._triviaTimer = setTimeout(() => {
+      if (getRoom(room.code) && room.phase === "trivia") resolveRound(room);
+    }, 20000);
+  } else if (gt === "draw_it") {
+    const wordObj =
+      DRAW_IT_WORDS[Math.floor(Math.random() * DRAW_IT_WORDS.length)];
+    const drawerIdx = (room.round - 1) % room.players.length;
+    room.drawItDrawerId = room.players[drawerIdx].id;
+    room.drawItWord = wordObj.word;
+    room.drawItGuessedIds = [];
+    room.phase = "drawing";
+    broadcast(room.code);
+    // Send secret word only to drawer
+    io.sockets.sockets
+      .get(room.drawItDrawerId)
+      ?.emit("draw_your_word", { word: wordObj.word, diff: wordObj.diff });
+    // Auto-resolve after 75 seconds
+    room._drawTimer = setTimeout(() => {
+      if (getRoom(room.code) && room.phase === "drawing") resolveRound(room);
+    }, 75000);
+  } else if (gt === "word_bomb") {
+    const pattern =
+      WORD_BOMB_PATTERNS[Math.floor(Math.random() * WORD_BOMB_PATTERNS.length)];
+    room.wordBombPattern = pattern;
+    room.wordBombMinFuse = 8;
+    room.wordBombUsedWords = [];
+    // Init lives for all players
+    room.wordBombLives = {};
+    room.players.forEach((p) => {
+      room.wordBombLives[p.id] = 2;
+    });
+    // Start with first player
+    room.wordBombActiveId = room.players[0].id;
+    room.phase = "word_bomb";
+    broadcast(room.code);
+    startBombTimer(room);
+  } else if (gt === "reaction_tap") {
+    room.reactionFired = false;
+    room.reactionTimes = {};
+    room.phase = "reaction";
+    broadcast(room.code);
+    const delay = 3000 + Math.random() * 6000;
+    room._reactionDelay = setTimeout(() => {
+      if (!getRoom(room.code) || room.phase !== "reaction") return;
+      room.reactionFired = true;
+      room.reactionStartTime = Date.now();
+      broadcast(room.code);
+      room._reactionTimer = setTimeout(() => {
+        if (getRoom(room.code) && room.phase === "reaction") resolveRound(room);
+      }, 10000);
+    }, delay);
   }
 }
 
@@ -915,6 +1101,81 @@ function resolveRound(room) {
     });
     result = { voteCounts: vc, winnerIds: winners.map((p) => p.id) };
   }
+  // ── ARCADE RESOLVERS ──────────────────────────────────────────────────────
+  else if (gt === "trivia_blitz") {
+    if (room._triviaTimer) {
+      clearTimeout(room._triviaTimer);
+      room._triviaTimer = null;
+    }
+    const correctIdx = room.questionData?.correctIndex;
+    const elapsed = Date.now() - (room.triviaStartTime || Date.now());
+    const answerTimes = room.triviaAnswerTimes || {};
+    const breakdown = {};
+    room.players.forEach((p) => {
+      const ans = room.answers[p.id];
+      if (ans !== undefined) {
+        const key = String(ans);
+        breakdown[key] = breakdown[key] || [];
+        breakdown[key].push({ id: p.id, name: p.name });
+        if (Number(ans) === Number(correctIdx)) {
+          const t = answerTimes[p.id] || elapsed;
+          const pts = Math.max(400, Math.round(1000 - (t / 20000) * 600));
+          p.score += pts;
+        }
+      }
+    });
+    result = { correctIndex: correctIdx, breakdown, answerTimes };
+  } else if (gt === "draw_it") {
+    if (room._drawTimer) {
+      clearTimeout(room._drawTimer);
+      room._drawTimer = null;
+    }
+    const allGuessedIds = room.drawItGuessedIds || [];
+    result = {
+      word: room.drawItWord,
+      drawerId: room.drawItDrawerId,
+      guessedIds: allGuessedIds,
+    };
+  } else if (gt === "word_bomb") {
+    if (room._bombTimer) {
+      clearTimeout(room._bombTimer);
+      room._bombTimer = null;
+    }
+    const alive = room.players.filter(
+      (p) => (room.wordBombLives[p.id] || 0) > 0,
+    );
+    const winner = alive.length === 1 ? alive[0] : null;
+    if (winner) winner.score += 300;
+    // Everyone who survived to this point gets bonus
+    alive.forEach((p) => {
+      p.score += 50;
+    });
+    result = { winnerIds: alive.map((p) => p.id), lives: room.wordBombLives };
+  } else if (gt === "reaction_tap") {
+    if (room._reactionTimer) {
+      clearTimeout(room._reactionTimer);
+      room._reactionTimer = null;
+    }
+    if (room._reactionDelay) {
+      clearTimeout(room._reactionDelay);
+      room._reactionDelay = null;
+    }
+    const times = room.reactionTimes || {};
+    const sorted = Object.entries(times).sort(([, a], [, b]) => a - b);
+    const pts = [1000, 800, 600, 400];
+    sorted.forEach(([id], rank) => {
+      const p = room.players.find((x) => x.id === id);
+      if (p) p.score += pts[rank] ?? 300;
+    });
+    result = {
+      rankings: sorted.map(([id, ms], rank) => ({
+        id,
+        ms,
+        rank: rank + 1,
+        name: room.players.find((x) => x.id === id)?.name ?? id,
+      })),
+    };
+  }
 
   room.roundResult = result;
   room.phase = "results";
@@ -925,20 +1186,26 @@ function resolveRound(room) {
 // SOCKET.IO
 // ══════════════════════════════════════
 io.on("connection", (socket) => {
-  socket.on("create_room", ({ name }, cb) => {
-    const room = createRoom(socket.id, name);
+  socket.on("create_room", ({ name, avatar }, cb) => {
+    const room = createRoom(socket.id, name, avatar);
     socket.join(room.code);
     cb({ ok: true, code: room.code, room: sanitize(room) });
   });
 
-  socket.on("join_room", ({ code, name }, cb) => {
+  socket.on("join_room", ({ code, name, avatar }, cb) => {
     const room = getRoom(code.toUpperCase());
     if (!room) return cb({ ok: false, error: "Room not found" });
     if (room.phase !== "lobby")
       return cb({ ok: false, error: "Game already started" });
     if (room.players.some((p) => p.name.toLowerCase() === name.toLowerCase()))
       return cb({ ok: false, error: "Name taken!" });
-    room.players.push({ id: socket.id, name, score: 0, isHost: false });
+    room.players.push({
+      id: socket.id,
+      name,
+      avatar: avatar || null,
+      score: 0,
+      isHost: false,
+    });
     socket.join(code.toUpperCase());
     broadcast(code.toUpperCase());
     cb({ ok: true, room: sanitize(room) });
@@ -969,7 +1236,9 @@ io.on("connection", (socket) => {
     const room = getRoom(code);
     if (
       !room ||
-      !["answering", "spotlight_write", "debate_write"].includes(room.phase)
+      !["answering", "spotlight_write", "debate_write", "trivia"].includes(
+        room.phase,
+      )
     )
       return;
     if (answer === undefined || answer === null) return;
@@ -977,9 +1246,19 @@ io.on("connection", (socket) => {
       return;
     if (room.gameType === "debate_pit" && !room.debaterIds.includes(socket.id))
       return;
+    // For trivia blitz, record answer timestamp for speed bonus
+    if (room.gameType === "trivia_blitz") {
+      room.triviaAnswerTimes = room.triviaAnswerTimes || {};
+      room.triviaAnswerTimes[socket.id] =
+        Date.now() - (room.triviaStartTime || Date.now());
+    }
     room.answers[socket.id] = answer;
     broadcast(code);
     if (checkAllAnswered(room)) {
+      if (room.gameType === "trivia_blitz") {
+        resolveRound(room);
+        return;
+      }
       const needVote = [
         "guess_the_liar",
         "two_truths",
@@ -1042,6 +1321,128 @@ io.on("connection", (socket) => {
     broadcast(code);
   });
 
+  // ── DRAW IT events ─────────────────────────────────────────────────────────
+  socket.on("draw_stroke", ({ code, stroke }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "drawing" || socket.id !== room.drawItDrawerId)
+      return;
+    socket.to(code).emit("draw_stroke", stroke);
+  });
+
+  socket.on("draw_clear", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "drawing" || socket.id !== room.drawItDrawerId)
+      return;
+    io.to(code).emit("draw_clear");
+  });
+
+  socket.on("draw_guess", ({ code, word }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "drawing") return;
+    if (socket.id === room.drawItDrawerId) return;
+    if ((room.drawItGuessedIds || []).includes(socket.id)) return;
+    const guess = String(word).toLowerCase().trim();
+    const secret = (room.drawItWord || "").toLowerCase().trim();
+    const guesserName =
+      room.players.find((x) => x.id === socket.id)?.name ?? "?";
+    if (guess === secret) {
+      room.drawItGuessedIds = room.drawItGuessedIds || [];
+      room.drawItGuessedIds.push(socket.id);
+      const order = room.drawItGuessedIds.length;
+      const pts = Math.max(100, 500 - (order - 1) * 100);
+      const guesser = room.players.find((x) => x.id === socket.id);
+      if (guesser) guesser.score += pts;
+      const drawer = room.players.find((x) => x.id === room.drawItDrawerId);
+      if (drawer) drawer.score += 50;
+      const nonDrawers = room.players.filter(
+        (x) => x.id !== room.drawItDrawerId,
+      );
+      io.to(code).emit("draw_guess_correct", {
+        guesserName,
+        pts,
+        guessedCount: room.drawItGuessedIds.length,
+        total: nonDrawers.length,
+      });
+      broadcast(code);
+      if (room.drawItGuessedIds.length >= nonDrawers.length) {
+        if (room._drawTimer) {
+          clearTimeout(room._drawTimer);
+          room._drawTimer = null;
+        }
+        resolveRound(room);
+      }
+    } else {
+      io.to(code).emit("draw_guess_wrong", { guesserName, word: guess });
+    }
+  });
+
+  // ── WORD BOMB events ───────────────────────────────────────────────────────
+  socket.on("word_bomb_submit", ({ code, word }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "word_bomb") return;
+    if (socket.id !== room.wordBombActiveId) return;
+    const pattern = (room.wordBombPattern || "").toUpperCase();
+    const w = String(word).toUpperCase().trim();
+    const usedWords = room.wordBombUsedWords || [];
+    const isValid =
+      w.length >= 3 && w.includes(pattern) && !usedWords.includes(w);
+    if (!isValid) {
+      socket.emit("word_bomb_invalid", {
+        reason:
+          w.length < 3
+            ? "Too short!"
+            : usedWords.includes(w)
+              ? "Already used!"
+              : `Must contain "${pattern}"!`,
+      });
+      return;
+    }
+    room.wordBombUsedWords.push(w);
+    if (room._bombTimer) {
+      clearTimeout(room._bombTimer);
+      room._bombTimer = null;
+    }
+    const p = room.players.find((x) => x.id === socket.id);
+    if (p) p.score += 50;
+    room.wordBombMinFuse = Math.max(3, (room.wordBombMinFuse || 8) - 0.4);
+    const next = getNextAliveBombPlayer(room, socket.id);
+    if (!next) {
+      resolveRound(room);
+      return;
+    }
+    room.wordBombActiveId = next.id;
+    room._bombPassCount = (room._bombPassCount || 0) + 1;
+    if (room._bombPassCount % 6 === 0) {
+      room.wordBombPattern =
+        WORD_BOMB_PATTERNS[
+          Math.floor(Math.random() * WORD_BOMB_PATTERNS.length)
+        ];
+      room.wordBombUsedWords = [];
+      io.to(code).emit("word_bomb_new_pattern", {
+        pattern: room.wordBombPattern,
+      });
+    }
+    broadcast(code);
+    startBombTimer(room);
+  });
+
+  // ── REACTION TAP events ────────────────────────────────────────────────────
+  socket.on("reaction_tap", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "reaction" || !room.reactionFired) return;
+    if (room.reactionTimes[socket.id] !== undefined) return;
+    room.reactionTimes[socket.id] =
+      Date.now() - (room.reactionStartTime || Date.now());
+    broadcast(code);
+    if (Object.keys(room.reactionTimes).length >= room.players.length) {
+      if (room._reactionTimer) {
+        clearTimeout(room._reactionTimer);
+        room._reactionTimer = null;
+      }
+      resolveRound(room);
+    }
+  });
+
   socket.on("disconnect", () => {
     Object.keys(rooms).forEach((code) => {
       const room = rooms[code];
@@ -1049,6 +1450,12 @@ io.on("connection", (socket) => {
       if (idx === -1) return;
       room.players.splice(idx, 1);
       if (room.players.length === 0) {
+        // Clean up arcade timers
+        if (room._triviaTimer) clearTimeout(room._triviaTimer);
+        if (room._drawTimer) clearTimeout(room._drawTimer);
+        if (room._bombTimer) clearTimeout(room._bombTimer);
+        if (room._reactionDelay) clearTimeout(room._reactionDelay);
+        if (room._reactionTimer) clearTimeout(room._reactionTimer);
         delete rooms[code];
         return;
       }
@@ -1057,9 +1464,15 @@ io.on("connection", (socket) => {
         room.players[0].isHost = true;
       }
       if (
-        ["answering", "spotlight_write", "debate_write"].includes(room.phase) &&
+        ["answering", "spotlight_write", "debate_write", "trivia"].includes(
+          room.phase,
+        ) &&
         checkAllAnswered(room)
       ) {
+        if (room.gameType === "trivia_blitz") {
+          resolveRound(room);
+          return;
+        }
         const needVote = [
           "guess_the_liar",
           "two_truths",
@@ -1069,6 +1482,17 @@ io.on("connection", (socket) => {
         needVote ? advanceTo(room, "voting") : resolveRound(room);
       }
       if (room.phase === "voting" && checkAllVoted(room)) resolveRound(room);
+      // Word bomb: if active player left, pass bomb
+      if (room.phase === "word_bomb" && room.wordBombActiveId === socket.id) {
+        const next = getNextAliveBombPlayer(room, socket.id);
+        if (next) {
+          if (room._bombTimer) clearTimeout(room._bombTimer);
+          room.wordBombActiveId = next.id;
+          startBombTimer(room);
+        } else {
+          resolveRound(room);
+        }
+      }
       broadcast(code);
     });
   });

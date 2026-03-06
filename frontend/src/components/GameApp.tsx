@@ -16,6 +16,10 @@ import VibeCheckMatchingScreen from "./screens/VibeCheckMatchingScreen";
 import DebatePitScreen from "./screens/DebatePitScreen";
 import ResultsScreen from "./screens/ResultsScreen";
 import ScoreboardScreen from "./screens/ScoreboardScreen";
+import TriviaBlitzScreen from "./screens/TriviaBlitzScreen";
+import DrawItScreen from "./screens/DrawItScreen";
+import WordBombScreen from "./screens/WordBombScreen";
+import ReactionTapScreen from "./screens/ReactionTapScreen";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -57,14 +61,14 @@ export default function GameApp() {
     }, [socket]);
 
     // ── Actions ──────────────────────────────────────
-    const createRoom = useCallback((name: string) => {
-        socket?.emit("create_room", { name }, (res: { ok: boolean; room: Room }) => {
+    const createRoom = useCallback((name: string, avatar: import("@/lib/types").AvatarConfig) => {
+        socket?.emit("create_room", { name, avatar }, (res: { ok: boolean; room: Room }) => {
             if (res.ok) { setRoom(res.room); setMyId(socket.id ?? ""); }
         });
     }, [socket]);
 
-    const joinRoom = useCallback((code: string, name: string) => {
-        socket?.emit("join_room", { code, name }, (res: { ok: boolean; room?: Room; error?: string }) => {
+    const joinRoom = useCallback((code: string, name: string, avatar: import("@/lib/types").AvatarConfig) => {
+        socket?.emit("join_room", { code, name, avatar }, (res: { ok: boolean; room?: Room; error?: string }) => {
             if (res.ok && res.room) { setRoom(res.room); setMyId(socket?.id ?? ""); }
             else setErrorMsg(res.error ?? "Failed to join");
         });
@@ -99,7 +103,10 @@ export default function GameApp() {
     }, [socket, room]);
 
     // ── Screen router ────────────────────────────────
-    const screenKey = `${phase}-${room?.gameType ?? ""}-${room?.round ?? 0}`;
+    // Lobby key must NOT include gameType — selecting a game would remount the whole screen & reset tab state
+    const screenKey = phase === "lobby"
+        ? "lobby"
+        : `${phase}-${room?.gameType ?? ""}-${room?.round ?? 0}`;
     const gt = room?.gameType ?? "";
     const binaryAnswerGames = ["never_have_i_ever", "would_you_rather", "hot_takes", "red_flag_radar", "this_or_that", "pick_your_poison", "burn_or_build", "speed_round", "rate_that_take"];
 
@@ -121,6 +128,7 @@ export default function GameApp() {
                     {phase === "home" && (
                         <HomeScreen onCreate={createRoom} onJoin={joinRoom} />
                     )}
+
 
                     {phase === "lobby" && room && (
                         <LobbyScreen room={room} myId={myId} isHost={isHost}
@@ -155,6 +163,23 @@ export default function GameApp() {
 
                     {phase === "debate_write" && room && (
                         <DebatePitScreen room={room} myId={myId} myDebateRole={myDebateRole} onSubmit={submitAnswer} />
+                    )}
+
+                    {/* Arcade games */}
+                    {phase === "trivia" && room && (
+                        <TriviaBlitzScreen room={room} myId={myId} onSubmit={submitAnswer} />
+                    )}
+
+                    {phase === "drawing" && room && (
+                        <DrawItScreen room={room} myId={myId} />
+                    )}
+
+                    {phase === "word_bomb" && room && (
+                        <WordBombScreen room={room} myId={myId} />
+                    )}
+
+                    {phase === "reaction" && room && (
+                        <ReactionTapScreen room={room} myId={myId} />
                     )}
 
                     {phase === "results" && room && (

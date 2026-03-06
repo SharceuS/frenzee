@@ -116,24 +116,26 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                         </>
                     )}
 
-                    {/* GUESS THE LIAR + ROAST ROOM: answers list then votes */}
+    // GUESS THE LIAR + ROAST ROOM: answers list then votes
                     {(gt === "guess_the_liar" || gt === "roast_room") && answers.length > 0 && (
                         <>
                             <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">
                                 {gt === "guess_the_liar" ? "📝 All answers" : "🎭 All roasts"}
                             </p>
-                            {answers.map((a, i) => (
-                                <motion.button key={a.playerId}
-                                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.07 }}
-                                    onClick={() => handle(a.playerId)}
-                                    disabled={hasVoted || !canVote(a.playerId)}
-                                    className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${(hasVoted && voted !== a.playerId) || !canVote(a.playerId) ? "opacity-40" : ""}`}>
-                                    <p className="font-nunito text-white/40 text-xs mb-1">{a.playerName}</p>
-                                    <p className="font-nunito font-bold text-white text-base">{a.answer as string}</p>
-                                    {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
-                                </motion.button>
-                            ))}
+                            {answers
+                                .filter(a => gt === "guess_the_liar" ? a.playerId !== myId : true)
+                                .map((a, i) => (
+                                    <motion.button key={a.playerId}
+                                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.07 }}
+                                        onClick={() => handle(a.playerId)}
+                                        disabled={hasVoted || !canVote(a.playerId)}
+                                        className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${(hasVoted && voted !== a.playerId) || !canVote(a.playerId) ? "opacity-40" : ""}`}>
+                                        <p className="font-nunito text-white/40 text-xs mb-1">{a.playerName}</p>
+                                        <p className="font-nunito font-bold text-white text-base">{a.answer as string}</p>
+                                        {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
+                                    </motion.button>
+                                ))}
                         </>
                     )}
 

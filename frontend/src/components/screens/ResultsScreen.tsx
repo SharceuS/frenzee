@@ -103,6 +103,25 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         const w = (rr.winnerIds as string[]) ?? [];
         headline = w.map(id => getName(id)).join(" & ") + " won the debate!";
         headlineEmoji = "⚔️"; headlineColor = "border-cyan-500/40";
+    } else if (gt === "trivia_blitz") {
+        const breakdown = rr.breakdown as Record<string, { id: string; name: string }[]> ?? {};
+        const correctIdx = rr.correctIndex as number;
+        const correcters = breakdown[String(correctIdx)] ?? [];
+        headline = correcters.length === 0 ? "No one got it right! 😱" : `${correcters.length} player${correcters.length !== 1 ? "s" : ""} got it right!`;
+        headlineEmoji = correcters.length === 0 ? "❌" : "🧠";
+        headlineColor = correcters.length > 0 ? "border-violet-500/40" : "border-red-500/40";
+    } else if (gt === "draw_it") {
+        const guessedIds = (rr.guessedIds as string[]) ?? [];
+        headline = guessedIds.length === 0 ? `Nobody guessed "${rr.word as string}"!` : `${guessedIds.length} player${guessedIds.length !== 1 ? "s" : ""} guessed "${rr.word as string}"!`;
+        headlineEmoji = "🎨"; headlineColor = "border-amber-500/40";
+    } else if (gt === "word_bomb") {
+        const winnerIds = (rr.winnerIds as string[]) ?? [];
+        headline = winnerIds.length > 0 ? winnerIds.map(id => getName(id)).join(" & ") + " survived!" : "Everyone got bombed!";
+        headlineEmoji = "💣"; headlineColor = "border-red-500/40";
+    } else if (gt === "reaction_tap") {
+        const rankings = (rr.rankings as { id: string; name: string; ms: number; rank: number }[]) ?? [];
+        headline = rankings.length > 0 ? `${rankings[0]?.name ?? "?"} was fastest at ${rankings[0]?.ms ?? 0}ms!` : "No one tapped!";
+        headlineEmoji = "⚡"; headlineColor = "border-green-500/40";
     }
 
     return (
@@ -353,6 +372,117 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                                 </motion.div>
                             );
                         })}
+                    </>
+                )}
+
+                {/* TRIVIA BLITZ details */}
+                {gt === "trivia_blitz" && (() => {
+                    const opts = room.questionData?.options as string[] ?? [];
+                    const correctIdx = rr.correctIndex as number;
+                    const breakdown = rr.breakdown as Record<string, { id: string; name: string }[]> ?? {};
+                    const times = rr.answerTimes as Record<string, number> ?? {};
+                    return (
+                        <>
+                            <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">🧠 Results</p>
+                            {opts.map((opt, i) => {
+                                const isCorrect = i === correctIdx;
+                                const pickers = breakdown[String(i)] ?? [];
+                                return (
+                                    <motion.div key={i} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                                        className={`answer-card flex items-center gap-3 ${isCorrect ? "border-green-500/50" : "border-red-500/20"}`}
+                                        style={{ borderColor: isCorrect ? "rgba(16,185,129,0.5)" : "rgba(239,68,68,0.2)" }}>
+                                        <span className="font-fredoka text-lg w-6">{["🟣", "🔵", "🟡", "🔴"][i]}</span>
+                                        <div className="flex-1">
+                                            <p className="font-fredoka text-white text-base leading-snug">{opt}</p>
+                                            {pickers.length > 0 && (
+                                                <p className="font-nunito text-white/50 text-xs mt-0.5">{pickers.map(p => p.name).join(", ")}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-nunito text-white/40 text-xs">{pickers.length} pick{pickers.length !== 1 ? "s" : ""}</span>
+                                            {isCorrect && <span className="text-green-400">✓</span>}
+                                        </div>
+                                    </motion.div>
+                                );
+                            })}
+                            {/* Speed times */}
+                            {Object.keys(times).length > 0 && (
+                                <>
+                                    <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">⚡ Speed (correct only)</p>
+                                    {(breakdown[String(correctIdx)] ?? [])
+                                        .sort((a, b) => (times[a.id] ?? 99999) - (times[b.id] ?? 99999))
+                                        .map((p, i) => (
+                                            <motion.div key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 + i * 0.06 }}
+                                                className="vote-card flex items-center gap-3">
+                                                <span className="font-nunito text-white/40 text-sm w-5">{i + 1}</span>
+                                                <span className="font-fredoka text-white flex-1">{p.name}</span>
+                                                <span className="font-nunito text-amber-400 text-sm">{((times[p.id] ?? 0) / 1000).toFixed(2)}s</span>
+                                            </motion.div>
+                                        ))}
+                                </>
+                            )}
+                        </>
+                    );
+                })()}
+
+                {/* DRAW IT details */}
+                {gt === "draw_it" && (
+                    <>
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">🎨 The word was:</p>
+                        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                            className="answer-card text-center py-4">
+                            <p className="font-fredoka text-4xl text-amber-300">{rr.word as string}</p>
+                            <p className="font-nunito text-white/40 text-sm mt-1">
+                                drawn by <span className="text-white/70">{getName(rr.drawerId as string)}</span>
+                            </p>
+                        </motion.div>
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">🏅 Guessed correctly</p>
+                        {room.players.filter((p) => p.id !== rr.drawerId).map((p, i) => {
+                            const guessed = (rr.guessedIds as string[])?.includes(p.id);
+                            return (
+                                <motion.div key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.07 }}
+                                    className="vote-card flex items-center gap-3">
+                                    <span className="font-fredoka text-white flex-1">{p.name}</span>
+                                    <span>{guessed ? "✅ Guessed" : "❌ Didn't guess"}</span>
+                                </motion.div>
+                            );
+                        })}
+                    </>
+                )}
+
+                {/* WORD BOMB details */}
+                {gt === "word_bomb" && (
+                    <>
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">💣 Survival results</p>
+                        {[...room.players].sort((a, b) => ((rr.lives as Record<string, number>)[b.id] ?? 0) - ((rr.lives as Record<string, number>)[a.id] ?? 0))
+                            .map((p, i) => {
+                                const l = (rr.lives as Record<string, number>)?.[p.id] ?? 0;
+                                const survived = l > 0;
+                                return (
+                                    <motion.div key={p.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                                        className={`vote-card flex items-center gap-3 ${survived ? "selected" : ""}`}>
+                                        <span className="font-fredoka text-white flex-1">{p.name}</span>
+                                        <span>{Array.from({ length: l }).map((_, j) => <span key={j}>💣</span>)}</span>
+                                        <span className="font-nunito text-xs">{survived ? "💪 Survived" : "💀 Bombed"}</span>
+                                    </motion.div>
+                                );
+                            })}
+                    </>
+                )}
+
+                {/* REACTION TAP details */}
+                {gt === "reaction_tap" && (
+                    <>
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">⚡ Tap rankings</p>
+                        {(rr.rankings as { id: string; name: string; ms: number; rank: number }[] ?? []).map((r, i) => (
+                            <motion.div key={r.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                                className={`vote-card flex items-center gap-3 ${i === 0 ? "selected" : ""}`}>
+                                <span className="font-nunito text-white/40 text-sm w-5">{r.rank}</span>
+                                <span className="font-fredoka text-white flex-1">{r.name}</span>
+                                <span className="font-nunito text-amber-400 text-sm font-bold">{r.ms}ms</span>
+                                {i === 0 && <span>🏆</span>}
+                            </motion.div>
+                        ))}
                     </>
                 )}
 
