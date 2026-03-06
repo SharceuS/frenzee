@@ -1,0 +1,921 @@
+// ═══════════════════════════════════════════════════════
+// POCKET PARTY – Question Banks (all games)
+// ═══════════════════════════════════════════════════════
+
+// ── GUESS THE LIAR ──────────────────────────────────────
+const GUESS_THE_LIAR = [
+  "What is the most embarrassing thing you've done in public?",
+  "What's your weirdest childhood memory?",
+  "What's something you've lied to your parents about?",
+  "What's the most childish thing you still do?",
+  "What's your most irrational fear?",
+  "What's the strangest dream you've ever had?",
+  "What's something you are secretly really bad at?",
+  "What's the worst haircut you've ever had?",
+  "What food do you secretly hate that everyone seems to love?",
+  "What's the most ridiculous lie you told as a kid?",
+  "What's a habit you have that you're slightly ashamed of?",
+  "What's the weirdest thing you've ever eaten?",
+  "What's the most useless talent you have?",
+  "What's the longest you've gone without showering?",
+  "What's your most unpopular opinion about a popular movie?",
+  "If you had to live in a TV show universe, which one and why?",
+  "What is a conspiracy theory you secretly find believable?",
+  "What's something you pretend to like but actually hate?",
+  "What's your most embarrassing celebrity crush?",
+  "What's the worst advice you've ever given?",
+  "What's the most immature thing you still find funny?",
+  "What app on your phone would be most embarrassing if someone saw?",
+  "What's a word you always mispronounce?",
+  "What's a movie you cried at that you'll never admit?",
+  "What's something you googled recently that you'd be embarrassed by?",
+  "What's the most ridiculous thing you've spent money on?",
+  "What's your most embarrassing autocorrect fail?",
+  "What's a skill you've faked having on a resume?",
+  "What's the most childish food you still eat?",
+  "What's an irrational thing that genuinely makes you angry?",
+  "What TV show do you secretly love that you'd never admit?",
+  "What's something you're weirdly competitive about?",
+  "What's a nickname you've had that you hated?",
+  "What's the dumbest thing you believed as a child?",
+  "What's the most awkward interaction you've had with a stranger?",
+];
+
+// ── TWO TRUTHS & A LIE ─────────────────────────────────
+const TWO_TRUTHS_TOPICS = [
+  "Tell 2 truths and 1 lie about your childhood",
+  "Tell 2 truths and 1 lie about your work life",
+  "Tell 2 truths and 1 lie about travel experiences you've had",
+  "Tell 2 truths and 1 lie about your food habits",
+  "Tell 2 truths and 1 lie about hidden talents you have",
+  "Tell 2 truths and 1 lie about embarrassing moments",
+  "Tell 2 truths and 1 lie about relationships",
+  "Tell 2 truths and 1 lie about things you've broken or lost",
+  "Tell 2 truths and 1 lie about weird things you've done alone",
+  "Tell 2 truths and 1 lie about fears or phobias",
+  "Tell 2 truths and 1 lie about sports or physical feats",
+  "Tell 2 truths and 1 lie about school memories",
+  "Tell 2 truths and 1 lie about your sleeping habits",
+  "Tell 2 truths and 1 lie about celebrities you've met or almost met",
+  "Tell 2 truths and 1 lie about your biggest mistakes",
+  "Tell 2 truths and 1 lie about things you've stolen (even tiny things)",
+  "Tell 2 truths and 1 lie about extreme sports or risks you've taken",
+  "Tell 2 truths and 1 lie about your hobbies (include a fake one)",
+  "Tell 2 truths and 1 lie about things that have happened to you on public transport",
+  "Tell 2 truths and 1 lie about things you've said to sound impressive but weren't true",
+];
+
+// ── MOST LIKELY TO ─────────────────────────────────────
+const MOST_LIKELY_TO = [
+  "Who is most likely to accidentally reply-all to an email?",
+  "Who is most likely to start a business that actually succeeds?",
+  "Who is most likely to still be awake at 4am for no reason?",
+  "Who is most likely to get lost in their own neighbourhood?",
+  "Who is most likely to cry at a dog food commercial?",
+  "Who is most likely to become famous on social media?",
+  "Who is most likely to eat an entire pizza alone?",
+  "Who is most likely to talk to strangers on public transport?",
+  "Who is most likely to forget their best friend's birthday?",
+  "Who is most likely to laugh at the absolute wrong moment?",
+  "Who is most likely to be late to their own wedding?",
+  "Who is most likely to accidentally start a rumour?",
+  "Who is most likely to become a cult leader?",
+  "Who is most likely to get kicked out of a library?",
+  "Who is most likely to date someone 20 years older?",
+  "Who is most likely to survive a zombie apocalypse?",
+  "Who is most likely to spend their savings on something ridiculous?",
+  "Who is most likely to accidentally text their boss something inappropriate?",
+  "Who is most likely to go viral for the wrong reasons?",
+  "Who is most likely to believe a scam email?",
+  "Who is most likely to get into an argument with a stranger online?",
+  "Who is most likely to have a secret second life?",
+  "Who is most likely to live off takeaway for the rest of their life?",
+  "Who is most likely to show up to a party way too early?",
+  "Who is most likely to write a bestselling novel?",
+  "Who is most likely to accidentally get married in Vegas?",
+  "Who is most likely to adopt 10 cats?",
+  "Who is most likely to become a reality TV star?",
+  "Who is most likely to ghost someone after a first date?",
+  "Who is most likely to know every line from a Disney movie?",
+  "Who is most likely to get stranded somewhere exotic?",
+  "Who is most likely to run a marathon without training?",
+  "Who is most likely to go vegan for a month and give up on day 3?",
+  "Who is most likely to brag about a mediocre achievement?",
+  "Who is most likely to get a tattoo they'll regret?",
+];
+
+// ── NEVER HAVE I EVER ──────────────────────────────────
+const NEVER_HAVE_I_EVER = [
+  "Never have I ever lied about having read a book",
+  "Never have I ever faked being sick to skip work or school",
+  "Never have I ever sent a text to the wrong person",
+  "Never have I ever eaten food off the floor",
+  "Never have I ever stalked an ex on social media",
+  "Never have I ever laughed so hard I snorted",
+  "Never have I ever cried at a movie in public",
+  "Never have I ever ignored a call and then immediately texted 'Sorry, I was busy'",
+  "Never have I ever accidentally skipped a shower for 3+ days",
+  "Never have I ever pretended to be on the phone to avoid someone",
+  "Never have I ever googled myself",
+  "Never have I ever talked to myself out loud in public",
+  "Never have I ever kissed someone I met that same day",
+  "Never have I ever lied about my age",
+  "Never have I ever eaten cereal for dinner as an adult",
+  "Never have I ever stolen something (even tiny)",
+  "Never have I ever cheated on a test or exam",
+  "Never have I ever accidentally called a teacher 'Mum' or 'Dad'",
+  "Never have I ever been blocked by someone on social media",
+  "Never have I ever laughed at something I definitely shouldn't have",
+  "Never have I ever stayed up all night for no good reason",
+  "Never have I ever online shopped while in a meeting or class",
+  "Never have I ever taken credit for something I didn't do",
+  "Never have I ever cried in a bathroom at a party",
+  "Never have I ever drunk-dialled someone I shouldn't have",
+  "Never have I ever had a dream about someone in this room",
+  "Never have I ever forgotten someone's name right after meeting them",
+  "Never have I ever walked into a glass door",
+  "Never have I ever eaten an entire bag of chips in one sitting",
+  "Never have I ever lied about being a good cook",
+  "Never have I ever ghosted someone for no real reason",
+  "Never have I ever made a fake excuse to leave a party",
+  "Never have I ever worn the same outfit multiple days in a row",
+  "Never have I ever slid into someone's DMs",
+  "Never have I ever laughed so hard at myself that I couldn't breathe",
+];
+
+// ── WOULD YOU RATHER ───────────────────────────────────
+const WOULD_YOU_RATHER = [
+  { a: "Only be able to whisper", b: "Only be able to shout" },
+  { a: "Have spaghetti for hair", b: "Sweat maple syrup" },
+  { a: "Know when you're going to die", b: "Know how you're going to die" },
+  { a: "Live without music", b: "Live without TV/films" },
+  { a: "Always be 10 minutes late", b: "Always be 20 minutes early" },
+  { a: "Have no phone for a year", b: "Have no money for a month" },
+  { a: "Be famous but broke", b: "Be rich but completely unknown" },
+  { a: "Only eat spicy food forever", b: "Only eat bland food forever" },
+  {
+    a: "Be able to read minds but no one likes you",
+    b: "Be universally loved but have no special powers",
+  },
+  { a: "Speak every language", b: "Play every instrument" },
+  {
+    a: "Age from the neck down, not the face",
+    b: "Age from the neck up, not the body",
+  },
+  { a: "Have a rewind button for your life", b: "Have a pause button" },
+  {
+    a: "Never sleep again but never be tired",
+    b: "Sleep 20 hours a day but feel amazing",
+  },
+  { a: "Fight one horse-sized duck", b: "Fight 100 duck-sized horses" },
+  { a: "Always feel overdressed", b: "Always feel underdressed" },
+  { a: "Be brilliant but ugly", b: "Be average intelligence but stunning" },
+  {
+    a: "Forget who you are every morning",
+    b: "Forget who everyone else is every morning",
+  },
+  {
+    a: "Have unlimited money but work 20 hours a day",
+    b: "Have just enough money and only work 2 hours a day",
+  },
+  {
+    a: "Travel back in time but can't change anything",
+    b: "Travel to the future but can't come back",
+  },
+  {
+    a: "Live in the wilderness alone for 5 years",
+    b: "Live in a city but be completely invisible to everyone",
+  },
+  {
+    a: "Lose all your memories from the last 5 years",
+    b: "Never be able to make new memories going forward",
+  },
+  {
+    a: "Have your inner monologue broadcast to everyone",
+    b: "Have your search history made public forever",
+  },
+  {
+    a: "Be fluent in all languages but have a terrible memory",
+    b: "Have a perfect memory but only speak one language",
+  },
+  {
+    a: "Live in a world with no internet",
+    b: "Live in a world with no restaurants",
+  },
+  {
+    a: "Always know when people are lying to you",
+    b: "Be able to lie perfectly without detection",
+  },
+  {
+    a: "Have hiccups for the rest of your life",
+    b: "Feel like you need to sneeze but never can",
+  },
+  {
+    a: "Every time you lie your nose doubles in size for a day",
+    b: "Every time you tell the truth you fart loudly",
+  },
+  {
+    a: "Have the ability to fly but only as fast as a bicycle",
+    b: "Be invisible but only when no one is looking",
+  },
+  {
+    a: "Have legs as long as your fingers",
+    b: "Have fingers as long as your legs",
+  },
+  {
+    a: "Only listen to one song for the rest of your life",
+    b: "Never be able to hear the same song twice",
+  },
+];
+
+// ── HOT TAKES ──────────────────────────────────────────
+const HOT_TAKES = [
+  "Pineapple on pizza is actually good",
+  "Texting is better than calling in almost every situation",
+  "Most people who say they love hiking actually just like Instagram photos of mountains",
+  "Working from home makes people less productive",
+  "Celebrity culture does more harm than good",
+  "Breakfast is the most overrated meal of the day",
+  "Open-plan offices are a terrible idea",
+  "The best friendships are ones where you don't text every day",
+  "Astrology is just as valid as personality tests like MBTI",
+  "Reality TV has ruined our attention spans",
+  "Most people who meditate are just sitting quietly and lying about the benefits",
+  "Sleeping in is a complete waste of a day",
+  "Cats are objectively better pets than dogs",
+  "Social media has done more harm than good to society",
+  "Going to university is overrated for most careers",
+  "The gym culture has become toxic and performative",
+  "Most life coaches are just people who couldn't make it in their original field",
+  "Tattoos look unprofessional in the workplace, and that's okay",
+  "It's completely acceptable to not want children",
+  "Long-distance relationships almost never work",
+  "Monogamy goes against human nature",
+  "Tipping culture has gotten completely out of hand",
+  "People who don't eat meat are healthier than those who do",
+  "Homework should be banned for children under 14",
+  "The school system is fundamentally broken and outdated",
+  "Most famous artworks are only considered great because experts told us they are",
+  "Cheat days are more harmful than helpful for health",
+  "Expensive wine doesn't actually taste better than cheap wine",
+  "Being an introvert is not a personality trait — it's just shyness",
+  "Working hard beats natural talent in the long run",
+  "Cancel culture has gone too far",
+  "Unplugging from social media for a year would improve most people's mental health",
+  "The happiest people are the ones who settled, not the ones who kept chasing more",
+  "Most people in relationships are just scared of being alone",
+  "Pets are a replacement for human connection and that's concerning",
+];
+
+// ── ROAST ROOM ─────────────────────────────────────────
+const ROAST_ROOM = [
+  "Write the worst Tinder bio imaginable",
+  "Write a one-star review for planet Earth",
+  "Write a motivational quote that is completely useless",
+  "Write a complaint letter to the concept of Mondays",
+  "Write the most passive-aggressive office email possible",
+  "Write a Yelp review for your own personality",
+  "Write the worst possible excuse for being late",
+  "Write a news headline from the year 3000",
+  "Write a text message you'd send to your past self that would confuse them most",
+  "Write the plot of the worst movie ever made",
+  "Write a fortune cookie message that gives terrible advice",
+  "Write the most unhelpful customer service response imaginable",
+  "Write a warning label for a human being",
+  "Write the world's most useless product description",
+  "Write a cover letter for the job of 'Professional Chaos Agent'",
+  "Write the worst possible life advice in one sentence",
+  "Write a horoscope that is devastatingly accurate and depressing",
+  "Write a children's book title that should not exist",
+  "Write a bumper sticker for someone having the worst day of their life",
+  "Write the worst birthday card message that still technically counts as a compliment",
+  "Write the most dramatic breakup text over something incredibly small",
+  "Write a TripAdvisor review of your own home",
+  "Write a LinkedIn recommendation for the dumbest decision you've ever made",
+  "Write the most unsatisfying ending to a story: 'And then...'",
+  "Write a survival manual tip that would get you killed",
+  "Write the least inspiring gym motivation poster text",
+  "Write an out-of-office reply that completely overshares",
+  "Write a very bad cooking recipe instruction step",
+  "Write the most self-congratulatory Instagram caption for something ordinary",
+  "Write the weirdest possible ice breaker question",
+];
+
+// ── RED FLAG RADAR ─────────────────────────────────────
+const RED_FLAG_RADAR = [
+  "A person who still has their ex's name in their phone as 'Do Not Answer'",
+  "A person who says 'I'm not like other people, I'm brutally honest'",
+  "A person who orders for you at a restaurant without asking",
+  "A person who has never had a relationship last longer than 3 months",
+  "A person whose entire personality is their diet (e.g., carnivore, keto, vegan)",
+  "A person who immediately tells you all the bad things their ex did",
+  "A person who says 'I don't really have close friends, most people can't handle me'",
+  "A person who checks your phone 'just casually'",
+  "A person whose love language is giving unsolicited advice",
+  "A person who says 'I'm a Scorpio, that's why I'm like this'",
+  "A person who never apologises — they just move on",
+  "A person who is excessively friendly to your friends but cold to you in private",
+  "A person who doesn't believe in therapy and thinks it's 'just venting'",
+  "A person who talks loudly on speakerphone in public",
+  "A person who still talks to every single one of their exes regularly",
+  "A person whose mood depends entirely on whether you texted back fast enough",
+  "A person who says 'I just say what others are afraid to say' before insulting you",
+  "A person who refers to their dog as 'my baby' in adult conversations",
+  "A person who quotes their own tweets or posts in conversation",
+  "A person who has 'entrepreneur' in their bio but no actual business",
+  "A person who makes everything a competition, even trivial stuff",
+  "A person who always has a one-upper story for everything you share",
+  "A person who is rude to waiters but very charming to everyone else",
+  "A person who still holds grudges from middle school",
+  "A person who invites you places and then panics when you say yes",
+  "A person who takes 3 days to reply and then acts hurt when you match the energy",
+  "A person who has never, not even once, admitted to being wrong",
+  "A person who makes 'jokes' that only work if you don't take them seriously",
+  "A person who needs to be the loudest in every room",
+  "A person who calls everyone else 'toxic' but exhibits most of the traits",
+];
+
+// ── VIBE CHECK ─────────────────────────────────────────
+const VIBE_CHECK_CATEGORIES = [
+  {
+    prompt: "If you were a pizza topping, what would you be?",
+    hint: "emoji or word",
+  },
+  {
+    prompt: "If you were a weather type, what would you be?",
+    hint: "emoji or word",
+  },
+  {
+    prompt: "If you were a movie genre, what would you be?",
+    hint: "e.g. Thriller, Romcom",
+  },
+  {
+    prompt: "If you were a dog breed, what would you be?",
+    hint: "emoji or breed name",
+  },
+  {
+    prompt: "If you were a season, what would you be and why?",
+    hint: "short answer",
+  },
+  {
+    prompt: "If you were a font, what would you be?",
+    hint: "e.g. Comic Sans, Times New Roman",
+  },
+  {
+    prompt: "If you were a vibe at a party, what would you be?",
+    hint: "e.g. wallflower, DJ, snack table",
+  },
+  {
+    prompt: "If you were a type of music festival, what would you be?",
+    hint: "e.g. jazz festival, rave, country fair",
+  },
+  {
+    prompt: "If you were a kitchen appliance, what would you be?",
+    hint: "emoji or name",
+  },
+  {
+    prompt: "If you could only use one emoji forever, what would it be?",
+    hint: "just the emoji",
+  },
+  {
+    prompt: "If you were a fast food chain, which one would you be?",
+    hint: "e.g. McDonald's, Chipotle",
+  },
+  {
+    prompt: "If you were a type of car, what would you be?",
+    hint: "emoji or car type",
+  },
+  {
+    prompt: "If you were an era of history, what would you be?",
+    hint: "e.g. Renaissance, 80s, caveman era",
+  },
+  {
+    prompt: "If you were a sport, which one would you be?",
+    hint: "emoji or name",
+  },
+  {
+    prompt: "If you were a social media platform, which one would you be?",
+    hint: "e.g. Twitter, Snapchat",
+  },
+  {
+    prompt: "If you were a superpower, what would you be?",
+    hint: "short answer",
+  },
+  {
+    prompt: "If you were a type of cheese, what would you be?",
+    hint: "e.g. Brie, Cheddar, Gouda",
+  },
+  {
+    prompt: "If you were a virus, which one would you be?",
+    hint: "e.g. common cold, chaos, FOMO",
+  },
+  {
+    prompt: "If you were a time of day, what time would you be?",
+    hint: "e.g. 3am chaos, golden hour",
+  },
+  {
+    prompt: "If you were a natural disaster, what would you be?",
+    hint: "e.g. earthquake, gentle drizzle",
+  },
+];
+
+// ── DEBATE PIT ─────────────────────────────────────────
+const DEBATE_PIT_TOPICS = [
+  {
+    topic: "Dogs vs Cats",
+    for: "Dogs are better pets",
+    against: "Cats are better pets",
+  },
+  {
+    topic: "Pineapple on pizza",
+    for: "Pineapple belongs on pizza",
+    against: "Pineapple does NOT belong on pizza",
+  },
+  {
+    topic: "Morning vs Night",
+    for: "Morning people have life figured out",
+    against: "Night owls are the true intellectuals",
+  },
+  {
+    topic: "Work from home vs Office",
+    for: "Working from home is superior",
+    against: "Office work is superior",
+  },
+  {
+    topic: "City vs Countryside",
+    for: "City living is the only real way to live",
+    against: "Countryside living beats city life",
+  },
+  {
+    topic: "Twitter vs Instagram",
+    for: "Twitter is the superior social network",
+    against: "Instagram is the superior social network",
+  },
+  {
+    topic: "Hot vs Cold weather",
+    for: "Hot weather is objectively better",
+    against: "Cold weather is objectively better",
+  },
+  {
+    topic: "Tabs vs spaces",
+    for: "Tabs are better than spaces in code",
+    against: "Spaces are better than tabs in code",
+  },
+  {
+    topic: "Books vs Movies",
+    for: "Books are always better than their movie adaptations",
+    against: "Movies often improve on the source material",
+  },
+  {
+    topic: "Cash vs Cards",
+    for: "Paying with cash is superior",
+    against: "Paying with cards is superior",
+  },
+  {
+    topic: "Introvert vs Extrovert",
+    for: "Introverts make better friends",
+    against: "Extroverts make better friends",
+  },
+  {
+    topic: "Early vs Late",
+    for: "Being fashionably late is acceptable and fine",
+    against: "Being on time or early shows respect",
+  },
+  {
+    topic: "Texting vs Calling",
+    for: "Texting is better than calling in every scenario",
+    against: "Phone calls are better than texts",
+  },
+  {
+    topic: "Sweet vs Savoury",
+    for: "Sweet food is superior to savoury",
+    against: "Savoury food is superior to sweet",
+  },
+  {
+    topic: "Ninjas vs Pirates",
+    for: "Ninjas would beat pirates in a fight",
+    against: "Pirates would beat ninjas in a fight",
+  },
+  {
+    topic: "Vacation style",
+    for: "Relaxing on a beach is the perfect holiday",
+    against: "Exploring and adventuring is the perfect holiday",
+  },
+  {
+    topic: "Spicy vs Mild",
+    for: "Spicy food is for brave people and cowards should adapt",
+    against: "Mild food is sophisticated and spicy is just a cry for attention",
+  },
+  {
+    topic: "Gym vs Home workouts",
+    for: "Going to the gym is necessary for proper fitness",
+    against: "You can get equally fit without ever entering a gym",
+  },
+  {
+    topic: "Quantity vs Quality",
+    for: "Having many good friends is better than one best friend",
+    against: "One true best friend is better than many acquaintances",
+  },
+  {
+    topic: "Experience vs Degree",
+    for: "A university degree is essential for career success",
+    against: "Real-world experience beats a degree every time",
+  },
+];
+
+module.exports = {
+  GUESS_THE_LIAR,
+  TWO_TRUTHS_TOPICS,
+  MOST_LIKELY_TO,
+  NEVER_HAVE_I_EVER,
+  WOULD_YOU_RATHER,
+  HOT_TAKES,
+  ROAST_ROOM,
+  RED_FLAG_RADAR,
+  VIBE_CHECK_CATEGORIES,
+  DEBATE_PIT_TOPICS,
+};
+
+// ── WORD ASSOCIATION ─────────────────────────────────────
+// (players see a word, all type first word that comes to mind; most popular answer wins)
+const WORD_ASSOCIATION = [
+  "BEACH",
+  "MONDAY",
+  "GHOST",
+  "PIZZA",
+  "THUNDER",
+  "LIBRARY",
+  "ROCKET",
+  "WEDDING",
+  "SNAKE",
+  "DENTIST",
+  "GOLD",
+  "MIDNIGHT",
+  "JUNGLE",
+  "FREEZE",
+  "HOSPITAL",
+  "DRAGON",
+  "DESERT",
+  "CLOCK",
+  "RAINBOW",
+  "VOLCANO",
+  "SHARK",
+  "SLEEPOVER",
+  "MUSEUM",
+  "TUNNEL",
+  "WITCH",
+  "DIAMOND",
+  "TRAFFIC",
+  "CARTOON",
+  "OCEAN",
+  "CARNIVAL",
+];
+
+// ── EMOJI STORY ───────────────────────────────────────────
+// (show 4–5 emojis, players write what story it tells; funniest answer voted)
+const EMOJI_STORIES = [
+  { emojis: "🌙 🚗 💨 🦌 😱", hint: "Tell the story these emojis describe" },
+  { emojis: "🧑‍🍳 🔥 🍝 😭 🚒", hint: "Tell the story these emojis describe" },
+  { emojis: "🎓 💼 😴 ☕ 💻", hint: "Tell the story these emojis describe" },
+  { emojis: "💍 🏃 ✈️ 🏝️ 🎊", hint: "Tell the story these emojis describe" },
+  { emojis: "🐶 🦴 🕳️ 😤 🌳", hint: "Tell the story these emojis describe" },
+  { emojis: "👻 🎃 🍬 🚪 😬", hint: "Tell the story these emojis describe" },
+  { emojis: "🛸 👽 🌽 🤠 📸", hint: "Tell the story these emojis describe" },
+  { emojis: "🧲 🧲 ❤️ 💥 🏥", hint: "Tell the story these emojis describe" },
+  { emojis: "🧸 🔪 🎭 🎬 😅", hint: "Tell the story these emojis describe" },
+  { emojis: "🕺 🍕 💸 😎 👑", hint: "Tell the story these emojis describe" },
+  { emojis: "😴 ⏰ 🏃 🚌 💨", hint: "Tell the story these emojis describe" },
+  { emojis: "🐱 🌊 🛶 🐟 😳", hint: "Tell the story these emojis describe" },
+  { emojis: "📱 💔 🍦 🎵 💃", hint: "Tell the story these emojis describe" },
+  { emojis: "🦈 🏊 🏃 🚤 🎣", hint: "Tell the story these emojis describe" },
+  { emojis: "🪄 🐸 😮 👑 💋", hint: "Tell the story these emojis describe" },
+  { emojis: "🌵 🤠 💨 🌪️ 🏠", hint: "Tell the story these emojis describe" },
+  { emojis: "🦅 🐀 😱 🏃 💨", hint: "Tell the story these emojis describe" },
+  { emojis: "🎸 🤘 💥 🔥 🎤", hint: "Tell the story these emojis describe" },
+  { emojis: "🧪 💫 👃 🐟 🤮", hint: "Tell the story these emojis describe" },
+  { emojis: "🚀 🌙 🧑‍🚀 🕺 🌏", hint: "Tell the story these emojis describe" },
+];
+
+// ── FINISH THE SENTENCE ───────────────────────────────────
+// (players complete a prompt; funniest voted)
+const FINISH_THE_SENTENCE = [
+  "I'd be rich if only I stopped buying…",
+  "The most chaotic thing about me is…",
+  "I've never told anyone that I secretly love…",
+  "You'll know I'm stressed when I start…",
+  "At 3am, you'll most likely find me…",
+  "If I had a warning label it would say…",
+  "My villain origin story starts with…",
+  "The weirdest hill I'll die on is…",
+  "My love language is actually just…",
+  "If my life were a movie, the tagline would be…",
+  "In another life I was definitely…",
+  "My main character moment was when…",
+  "I can't be trusted with my phone after…",
+  "The one app I should delete but won't is…",
+  "My childhood self would be disappointed that I still…",
+  "I become a completely different person when…",
+  "The thing I'm most delusional about is…",
+  "My toxic trait is…",
+  "No one knows that I cry every time I watch…",
+  "If dogs could talk, mine would say…",
+  "I've never admitted this, but I actually enjoy…",
+  "The fastest way to lose my respect is…",
+  "My love story would start with…",
+  "I pretend to like _______ but secretly think it's overrated.",
+  "If I disappeared for a week no one would notice because…",
+];
+
+// ── THIS OR THAT (RAPID FIRE) ─────────────────────────────
+// (fast binary votes – no writing needed; just two visual options)
+const THIS_OR_THAT = [
+  { a: "Morning person ☀️", b: "Night owl 🌙" },
+  { a: "Cat person 🐱", b: "Dog person 🐶" },
+  { a: "Introvert 🏠", b: "Extrovert 🎉" },
+  { a: "Salty 🧂", b: "Sweet 🍭" },
+  { a: "Text 📱", b: "Call 📞" },
+  { a: "Dress up 👗", b: "Dress down 👕" },
+  { a: "City life 🏙️", b: "Nature life 🏕️" },
+  { a: "Netflix 📺", b: "Cinema 🎬" },
+  { a: "Work hard 💪", b: "Work smart 🧠" },
+  { a: "Spender 💸", b: "Saver 🐷" },
+  { a: "Plan everything 📋", b: "Wing it 🦅" },
+  { a: "Pineapple on pizza 🍍", b: "Absolutely not 🚫" },
+  { a: "Heels 👠", b: "Sneakers 👟" },
+  { a: "Cook at home 🍳", b: "Order in 🛵" },
+  { a: "Social media break 📴", b: "Always online 📲" },
+  { a: "Gym grind 🏋️", b: "Couch potato 🛋️" },
+  { a: "Coffee ☕", b: "Tea 🫖" },
+  { a: "Early 🕐", b: "Late 🕙" },
+  { a: "Minimalist 🤍", b: "Maximalist ✨" },
+  { a: "Beach 🏖️", b: "Mountains ⛰️" },
+];
+
+// ── UNHINGED ADVICE ───────────────────────────────────────
+// (players give advice for absurd scenarios; funniest voted)
+const UNHINGED_ADVICE = [
+  "You accidentally texted your crush 'I love you' meant for your dog. What do you do?",
+  "You arrive to your own wedding and realize you forgot the rings. What's your plan?",
+  "Your boss follows you on Instagram and sees all your party photos. How do you handle it?",
+  "You wake up tomorrow able to hear everyone's thoughts. What's your first move?",
+  "You're at a job interview and let out an extremely loud sneeze. How do you recover?",
+  "You've been talking to someone for 20 minutes before realizing they're not who you thought. What now?",
+  "You accidentally liked a photo from 3 years ago on your ex's Instagram. Your move?",
+  "You discover your pet can actually talk — but only to embarrass you. What's your response?",
+  "You find a time machine but it only goes forward exactly 5 minutes. What's your plan?",
+  "You become fluent in a language overnight — but it's an extinct one. How do you use this?",
+  "You accidentally cc'd your entire company on a very personal email. What do you do?",
+  "You're on a first date and your card gets declined at the most expensive restaurant. What's your move?",
+  "You fall asleep on public transport and miss your stop by 8 stations. How do you recover?",
+  "You wake up to find you've been sleepwalking and reorganized your neighbour's kitchen. Now what?",
+  "You're giving a presentation and your fly has been down the entire time. How do you address it?",
+  { a: "Morning person ☀️", b: "Night owl 🌙" }, // placeholder removed by filter below
+];
+
+// ── CONFESSIONS (ANONYMOUS) ───────────────────────────────
+// (players write anonymous confessions re: the prompt; others guess who wrote what)
+const CONFESSIONS_PROMPTS = [
+  "Confess something embarrassing you did this week",
+  "Confess your most irrational fear without judgment",
+  "Confess a lie you've gotten away with",
+  "Confess a celebrity you'd marry without hesitation",
+  "Confess something you'd never admit sober",
+  "Confess a childhood memory that still haunts you",
+  "Confess the most embarrassing song on your playlist",
+  "Confess something you do in secret that would shock people",
+  "Confess a guilty pleasure you've never told anyone",
+  "Confess an honest opinion about social media",
+  "Confess something you pretend to understand but don't",
+  "Confess a double standard you hold",
+  "Confess a food combination you eat that others would find disgusting",
+  "Confess a totally unrealistic dream you still believe might happen",
+  "Confess the weirdest search in your browser history this week",
+  "Confess something you've done to avoid a social situation",
+  "Confess a time you royally misjudged a situation",
+  "Confess an opinion about this group that you've kept to yourself",
+  "Confess your actual opinion on your job or school",
+  "Confess the last time you cried and why",
+];
+
+// ── SPEED ROUND (RAPID TRUE/FALSE) ───────────────────────
+// (yes/no about yourself; minority wins)
+const SPEED_ROUND = [
+  "I've ghosted someone and never felt bad about it",
+  "I've re-gifted a present before",
+  "I've eaten food that fell on the floor in the last month",
+  "I've faked laughing at something I didn't understand",
+  "I've looked at someone's phone without them knowing",
+  "I've told a white lie in the last 24 hours",
+  "I've googled someone before meeting them",
+  "I've eaten straight from the pot/pan",
+  "I've screenshot a message to show friends",
+  "I've sent a voice note that was longer than 2 minutes",
+  "I've cancelled plans last minute with a made-up excuse",
+  "I've watched a show I hate-watch on purpose",
+  "I've sung loudly alone in the car",
+  "I've pretended to be busy to avoid talking to someone",
+  "I've spent more than 2 hours deciding what to watch",
+  "I've laughed at the wrong moment in a serious conversation",
+  "I've bought something purely because a stranger on TikTok told me to",
+  "I've eaten an entire meal standing at the fridge",
+  "I've rewatched the same comfort show more than 3 times",
+  "I've secretly judged someone for their music taste",
+];
+
+// ── PICK YOUR POISON ──────────────────────────────────────
+// (extreme would-you-rathers – more outrageous)
+const PICK_YOUR_POISON = [
+  {
+    a: "Always smell slightly of boiled cabbage",
+    b: "Always look like you just woke up",
+  },
+  { a: "Only able to speak in questions", b: "Only able to speak in rhymes" },
+  {
+    a: "Have hiccups for life but invisible",
+    b: "Never be able to whisper, only shout",
+  },
+  {
+    a: "Know everyone's salary",
+    b: "Know exactly how many people find you attractive",
+  },
+  { a: "Always feel slightly hungry", b: "Always feel slightly cold" },
+  {
+    a: "Every outfit you wear turns neon yellow",
+    b: "Hair grows 1cm per hour forever",
+  },
+  {
+    a: "Always have a camera crew following you",
+    b: "Your thoughts are broadcast on a public radio frequency",
+  },
+  {
+    a: "Never able to listen to music again",
+    b: "Never able to watch a film/show again",
+  },
+  {
+    a: "Sweat maple syrup when nervous",
+    b: "Sneeze glitter every time you laugh",
+  },
+  { a: "Attract all bees within 50m", b: "Attract all pigeons within 50m" },
+  {
+    a: "Age 5x faster from the neck up",
+    b: "Age 5x faster from the neck down",
+  },
+  {
+    a: "Win every argument but be wrong every single time",
+    b: "Always be right but never be able to argue back",
+  },
+  {
+    a: "Only eat food that's the color beige",
+    b: "Only eat food at exactly room temperature",
+  },
+  {
+    a: "Whenever you lie your eyebrows fall off",
+    b: "Whenever you're nervous you start speaking backwards",
+  },
+  {
+    a: "Everyone can hear your search history as a notification",
+    b: "Everyone can see your screen time daily summary",
+  },
+  {
+    a: "You laugh uncontrollably in every serious situation",
+    b: "You cry at every happy moment",
+  },
+  { a: "Live without internet", b: "Live without indoor plumbing" },
+  {
+    a: "Be 10 years older",
+    b: "Be 10 years younger than your current age forever",
+  },
+  {
+    a: "Every DM you send gets read aloud by your dad",
+    b: "Your mum sees everything you post for 1 week",
+  },
+  {
+    a: "Be famous for something embarrassing",
+    b: "Be completely unknown despite doing something great",
+  },
+];
+
+// ── BURN OR BUILD ─────────────────────────────────────────
+// (would you scrap or keep something – Burn = scrap, Build = keep/improve)
+const BURN_OR_BUILD = [
+  "Homework / assignments",
+  "Open-plan offices",
+  "Small talk with strangers",
+  "Alarm clocks",
+  "Tipping culture",
+  "Reply-all email threads",
+  "Passwords (having hundreds of different ones)",
+  "In-person meetings that could've been emails",
+  "Daylight saving time",
+  "Airplane middle seats",
+  "Subscription services for literally everything",
+  "Comment sections",
+  "Voicemail",
+  "Elevator small talk",
+  "The concept of 'sleeping on it' instead of making a decision",
+  "Group projects",
+  "Mandatory office holiday parties",
+  "Social media likes / follower counts",
+  "FOMO as a concept",
+  "Resolutions every New Year",
+  "The 9-5 work day",
+  "Networking events",
+  "Celebrity culture",
+  "Dress codes",
+];
+
+// ── RATE THAT TAKE ────────────────────────────────────────
+// (everyone secretly rates a wild opinion 1–5 stars on their phone; avg revealed)
+// uses binary agree/disagree in the existing vote system for simplicity
+const RATE_THAT_TAKE = [
+  "Cereal is just a fancy cold soup and we're all in denial",
+  "Sending a voice note over 1 minute is an act of aggression",
+  "People who take off shoes at someone else's house without asking are unhinged",
+  "Sandwiches taste better when someone else makes them",
+  "Anyone who reclines their airplane seat should be banned from flying",
+  "Reading before sleeping is overrated — scrolling is just as good",
+  "Being good at texting back is a personality trait",
+  "Hot dogs are a category of sandwich",
+  "GIF is pronounced 'jiff' and I've accepted my fate",
+  "The best nap is an accidental one on the sofa at 4pm",
+  "Replying 'lol' means you're not actually laughing at all",
+  "Pineapple belongs on pizza and the debate is settled",
+  "Morning people and night owls are just different species",
+  "Everyone has a song they secretly think describes them perfectly",
+  "The second movie in a trilogy is always the best one",
+  "There's no such thing as a bad dog, only bad owners",
+  "People who complain about spoilers after a year deserve them",
+  "Quiet quitting is just having work-life balance",
+  "Putting effort into your appearance shows self-respect",
+  "It's socially acceptable to unfriend someone without a reason",
+];
+
+// ── SUPERLATIVES ──────────────────────────────────────────
+// (vote who in the group fits each category – like Most Likely To but funnier)
+const SUPERLATIVES = [
+  "Most likely to become famous for no reason",
+  "Most likely to get lost in their own neighbourhood",
+  "Most likely to accidentally start a cult",
+  "Most likely to become a reality TV star",
+  "Most likely to live off-grid in 10 years",
+  "Most likely to be late to their own funeral",
+  "Most likely to be still awake at 4am right now",
+  "Most likely to cry at a dog food commercial",
+  "Most likely to end up on a true crime podcast",
+  "Most likely to survive a zombie apocalypse",
+  "Most likely to ghost someone and feel zero guilt",
+  "Most likely to forget to eat if not reminded",
+  "Most likely to start a random business venture",
+  "Most likely to fall asleep in a 5-minute meeting",
+  "Most likely to have a complicated coffee order",
+  "Most likely to become a millionaire by accident",
+  "Most likely to move to another country on a whim",
+  "Most likely to go viral for the wrong reasons",
+  "Most likely to be a secret genius nobody suspects",
+  "Most likely to have the most chaotic group chat",
+];
+
+// ── WHOSE LINE IS IT (QUOTE ATTRIBUTION) ─────────────────
+// (host reads a wild quote written by players; others guess who said it)
+const WHOSE_LINE_PROMPTS = [
+  "Write your most controversial opinion in one sentence",
+  "Write the last genuinely unhinged thought you had today",
+  "Write what you'd say if you were a villain making a speech",
+  "Write a one-sentence review of your love life",
+  "Write the title of your autobiography",
+  "Write your tombstone inscription (funny or real)",
+  "Write a hot take about our friend group",
+  "Write a caption for a photo of you at your worst",
+  "Write the first line of your memoir",
+  "Write a text you'd send your past self 5 years ago",
+  "Write your personal dating profile headline",
+  "Write a warning label for yourself as a human being",
+  "Write what the news headline would say about you ten years from now",
+  "Write the worst advice you could give someone starting a new job",
+  "Write a totally realistic excuse for being late",
+];
+
+module.exports = {
+  GUESS_THE_LIAR,
+  TWO_TRUTHS_TOPICS,
+  MOST_LIKELY_TO,
+  NEVER_HAVE_I_EVER,
+  WOULD_YOU_RATHER,
+  HOT_TAKES,
+  ROAST_ROOM,
+  RED_FLAG_RADAR,
+  VIBE_CHECK_CATEGORIES,
+  DEBATE_PIT_TOPICS,
+  WORD_ASSOCIATION,
+  EMOJI_STORIES,
+  FINISH_THE_SENTENCE,
+  THIS_OR_THAT,
+  UNHINGED_ADVICE,
+  CONFESSIONS_PROMPTS,
+  SPEED_ROUND,
+  PICK_YOUR_POISON,
+  BURN_OR_BUILD,
+  RATE_THAT_TAKE,
+  SUPERLATIVES,
+  WHOSE_LINE_PROMPTS,
+};
