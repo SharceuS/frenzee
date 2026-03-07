@@ -394,7 +394,7 @@ function pickQ(array, room) {
 const BOMBER_COLS = 15;
 const BOMBER_ROWS = 13;
 const BOMBER_TICK = 50;
-const BOMBER_SPEED = 4.5;
+const BOMBER_SPEED = 7.0;
 const BOMBER_BOMB_MS = 3000;
 const BOMBER_EXP_MS = 2000;
 const BOMBER_PLAYER_R = 0.36;
@@ -408,6 +408,7 @@ const BOMBER_SPAWNS = [
 
 function generateBomberGrid() {
   const grid = [];
+  // Step 1: lay hard walls (borders + interior pillars)
   for (let r = 0; r < BOMBER_ROWS; r++) {
     grid[r] = [];
     for (let c = 0; c < BOMBER_COLS; c++) {
@@ -417,38 +418,35 @@ function generateBomberGrid() {
         c === 0 ||
         c === BOMBER_COLS - 1
       ) {
-        grid[r][c] = 1;
+        grid[r][c] = 1; // border
       } else if (r % 2 === 0 && c % 2 === 0) {
-        grid[r][c] = 1;
+        grid[r][c] = 1; // interior pillar — never overwrite these
       } else {
         grid[r][c] = 0;
       }
     }
   }
-  const clearAround = (sr, sc) => {
-    [
-      [-1, 0],
-      [0, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-      [1, 1],
-      [1, -1],
-      [-1, 1],
-      [-1, -1],
-    ].forEach(([dr, dc]) => {
-      const nr = sr + dr,
-        nc = sc + dc;
-      if (nr > 0 && nr < BOMBER_ROWS - 1 && nc > 0 && nc < BOMBER_COLS - 1)
-        grid[nr][nc] = 0;
-    });
-  };
-  BOMBER_SPAWNS.forEach(({ r, c }) => clearAround(r, c));
+  // Step 2: soft walls on eligible interior tiles (skip pillars — they are already 1)
   for (let r = 1; r < BOMBER_ROWS - 1; r++) {
     for (let c = 1; c < BOMBER_COLS - 1; c++) {
       if (grid[r][c] === 0 && Math.random() < 0.65) grid[r][c] = 2;
     }
   }
+  // Step 3: clear spawn zones AFTER soft walls so they can't overwrite them
+  // For each spawn, clear the tile itself + 2 tiles in the L toward the arena centre
+  // Never touch hard-pillar cells (r%2===0 && c%2===0)
+  const safeClear = (r, c) => {
+    if (r > 0 && r < BOMBER_ROWS - 1 && c > 0 && c < BOMBER_COLS - 1) {
+      if (!(r % 2 === 0 && c % 2 === 0)) grid[r][c] = 0;
+    }
+  };
+  BOMBER_SPAWNS.forEach(({ r, c }) => {
+    const dr = r < BOMBER_ROWS / 2 ? 1 : -1; // direction toward centre vertically
+    const dc = c < BOMBER_COLS / 2 ? 1 : -1; // direction toward centre horizontally
+    safeClear(r, c); // spawn tile itself
+    safeClear(r + dr, c); // one step toward centre (vertical)
+    safeClear(r, c + dc); // one step toward centre (horizontal)
+  });
   return grid;
 }
 
@@ -459,31 +457,74 @@ function bomberIsSolid(grid, r, c) {
 
 function moveBomberPlayer(grid, player, dx, dy) {
   if (!player.bomberAlive) return;
-  const speed = BOMBER_SPEED * (BOMBER_TICK / 1000);
-  let nx = player.bomberX + dx * speed;
-  let ny = player.bomberY + dy * speed;
+  const step = BOMBER_SPEED * (BOMBER_TICK / 1000);
   const R = BOMBER_PLAYER_R;
+
   const blocked = (wx, wy) =>
     bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx - R)) ||
     bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx + R - 0.001)) ||
     bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx - R)) ||
     bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx + R - 0.001));
 
-  if (blocked(nx, player.bomberY)) {
-    nx = player.bomberX;
-    const tc = Math.floor(player.bomberY) + 0.5;
-    const nudgedY = player.bomberY + (tc - player.bomberY) * 0.3;
-    if (!blocked(player.bomberX, nudgedY)) player.bomberY = nudgedY;
-  }
-  if (blocked(nx, ny)) {
-    ny = player.bomberY;
-    const tc = Math.floor(player.bomberX) + 0.5;
-    const nudgedX = player.bomberX + (tc - player.bomberX) * 0.3;
-    if (!blocked(nudgedX, ny)) nx = nudgedX;
-  }
+  const nx = player.bomberX + dx * step;
+  const ny = player.bomberY + dy * step;
+
+  // Try full diagonal move first
   if (!blocked(nx, ny)) {
     player.bomberX = nx;
     player.bomberY = ny;
+    return;
+  }
+
+  // Try X-axis only
+  const canX = !blocked(nx, player.bomberY);
+  // Try Y-axis only
+  const canY = !blocked(player.bomberX, ny);
+
+  if (canX) {
+    player.bomberX = nx;
+    // Smooth nudge toward tile-centre on Y so player glides into corridors
+    const ty = Math.floor(player.bomberY) + 0.5;
+    const nudge = (ty - player.bomberY) * 0.35;
+    if (
+      Math.abs(nudge) > 0.0005 &&
+      !blocked(player.bomberX, player.bomberY + nudge)
+    )
+      player.bomberY += nudge;
+    return;
+  }
+
+  if (canY) {
+    player.bomberY = ny;
+    // Smooth nudge toward tile-centre on X
+    const tx = Math.floor(player.bomberX) + 0.5;
+    const nudge = (tx - player.bomberX) * 0.35;
+    if (
+      Math.abs(nudge) > 0.0005 &&
+      !blocked(player.bomberX + nudge, player.bomberY)
+    )
+      player.bomberX += nudge;
+    return;
+  }
+
+  // Fully blocked — still nudge toward corridor centre to avoid sticking to corners
+  if (dx !== 0) {
+    const ty = Math.floor(player.bomberY) + 0.5;
+    const nudge = (ty - player.bomberY) * 0.35;
+    if (
+      Math.abs(nudge) > 0.0005 &&
+      !blocked(player.bomberX, player.bomberY + nudge)
+    )
+      player.bomberY += nudge;
+  }
+  if (dy !== 0) {
+    const tx = Math.floor(player.bomberX) + 0.5;
+    const nudge = (tx - player.bomberX) * 0.35;
+    if (
+      Math.abs(nudge) > 0.0005 &&
+      !blocked(player.bomberX + nudge, player.bomberY)
+    )
+      player.bomberX += nudge;
   }
 }
 

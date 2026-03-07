@@ -1,0 +1,1 @@
+DEPLOY=$(pwd) && rm -Rf * && git clone https://github.com/SharceuS/frenzee /tmp/_frenzee_deploy && cd /tmp/_frenzee_deploy/frontend && npm i && npm run build && cp -r /tmp/_frenzee_deploy/frontend/. "$DEPLOY/" && rm -rf /tmp/_frenzee_deploy && cd "$DEPLOY" && pm2 restart 2
