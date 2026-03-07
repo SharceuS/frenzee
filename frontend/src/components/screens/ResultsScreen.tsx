@@ -122,6 +122,10 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         const rankings = (rr.rankings as { id: string; name: string; ms: number; rank: number }[]) ?? [];
         headline = rankings.length > 0 ? `${rankings[0]?.name ?? "?"} was fastest at ${rankings[0]?.ms ?? 0}ms!` : "No one tapped!";
         headlineEmoji = "⚡"; headlineColor = "border-green-500/40";
+    } else if (gt === "bomberman") {
+        const wn = rr.winnerName as string | null;
+        headline = wn ? `${wn} won the arena! 🏆` : "Everyone got blown up!";
+        headlineEmoji = "💥"; headlineColor = "border-red-500/40";
     } else if (["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"].includes(gt)) {
         const w = (rr.winnerIds as string[]) ?? [];
         const emojis: Record<string, string> = { finish_the_sentence: "✏️", confessions: "🤫", whose_line: "💬", emoji_story: "📖", unhinged_advice: "🤪" };
@@ -489,6 +493,21 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                             </motion.div>
                         ))}
                     </>
+                )}
+
+                {/* BOMBERMAN details */}
+                {gt === "bomberman" && (
+                    <div className="vote-card flex items-center gap-4">
+                        <span className="text-3xl">💥</span>
+                        <div>
+                            <p className="font-fredoka text-white text-lg">
+                                {(rr.winnerName as string) ? `${rr.winnerName as string} wins!` : "No survivors!"}
+                            </p>
+                            {(rr.winnerName as string) && (
+                                <p className="font-nunito text-white/50 text-xs">+300 pts awarded</p>
+                            )}
+                        </div>
+                    </div>
                 )}
 
                 {/* CREATIVE ANSWER GAMES: reveal who wrote what + vote counts */}

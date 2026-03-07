@@ -36,7 +36,8 @@ export type Phase =
   | "trivia"
   | "drawing"
   | "word_bomb"
-  | "reaction";
+  | "reaction"
+  | "bomberman";
 
 export interface Player {
   id: string;
@@ -46,6 +47,10 @@ export interface Player {
   avatar?: AvatarConfig;
   hasAnswered?: boolean;
   hasVoted?: boolean;
+  // Bomberman
+  bomberX?: number | null;
+  bomberY?: number | null;
+  bomberAlive?: boolean | null;
 }
 
 export interface AnswerEntry {
@@ -87,4 +92,20 @@ export interface Room {
   // Reaction Tap
   reactionFired: boolean;
   reactionTimes: Record<string, number>;
+  // Bomberman
+  bomberGrid: number[][] | null;
+  bomberBombs: {
+    r: number;
+    c: number;
+    timer: number;
+    ownerId: string;
+    range: number;
+  }[];
+  bomberExplosions: {
+    tiles: { r: number; c: number }[];
+    centerR: number;
+    centerC: number;
+    expiresAt: number;
+  }[];
+  bomberGameOver: boolean;
 }

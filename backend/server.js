@@ -305,6 +305,17 @@ const GAME_CATALOGUE = {
     maxPlayers: 12,
     color: "#10B981",
   },
+  bomberman: {
+    id: "bomberman",
+    title: "Bomb Arena",
+    emoji: "💥",
+    description:
+      "Free movement arena! Place bombs to blast opponents. Last one standing wins!",
+    category: "arcade",
+    minPlayers: 1,
+    maxPlayers: 4,
+    color: "#EF4444",
+  },
 };
 
 app.get("/catalogue", (_, res) => res.json(GAME_CATALOGUE));
@@ -377,6 +388,251 @@ function pickQ(array, room) {
 // ══════════════════════════════════════
 // SANITIZE
 // ══════════════════════════════════════
+// ══════════════════════════════════════
+// BOMBERMAN ENGINE
+// ══════════════════════════════════════
+const BOMBER_COLS = 15;
+const BOMBER_ROWS = 13;
+const BOMBER_TICK = 50;
+const BOMBER_SPEED = 4.5;
+const BOMBER_BOMB_MS = 3000;
+const BOMBER_EXP_MS = 2000;
+const BOMBER_PLAYER_R = 0.36;
+const BOMBER_MAX_TIME = 180000;
+const BOMBER_SPAWNS = [
+  { r: 1, c: 1 },
+  { r: 1, c: 13 },
+  { r: 11, c: 1 },
+  { r: 11, c: 13 },
+];
+
+function generateBomberGrid() {
+  const grid = [];
+  for (let r = 0; r < BOMBER_ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < BOMBER_COLS; c++) {
+      if (
+        r === 0 ||
+        r === BOMBER_ROWS - 1 ||
+        c === 0 ||
+        c === BOMBER_COLS - 1
+      ) {
+        grid[r][c] = 1;
+      } else if (r % 2 === 0 && c % 2 === 0) {
+        grid[r][c] = 1;
+      } else {
+        grid[r][c] = 0;
+      }
+    }
+  }
+  const clearAround = (sr, sc) => {
+    [
+      [-1, 0],
+      [0, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ].forEach(([dr, dc]) => {
+      const nr = sr + dr,
+        nc = sc + dc;
+      if (nr > 0 && nr < BOMBER_ROWS - 1 && nc > 0 && nc < BOMBER_COLS - 1)
+        grid[nr][nc] = 0;
+    });
+  };
+  BOMBER_SPAWNS.forEach(({ r, c }) => clearAround(r, c));
+  for (let r = 1; r < BOMBER_ROWS - 1; r++) {
+    for (let c = 1; c < BOMBER_COLS - 1; c++) {
+      if (grid[r][c] === 0 && Math.random() < 0.65) grid[r][c] = 2;
+    }
+  }
+  return grid;
+}
+
+function bomberIsSolid(grid, r, c) {
+  if (r < 0 || r >= BOMBER_ROWS || c < 0 || c >= BOMBER_COLS) return true;
+  return grid[r][c] === 1 || grid[r][c] === 2;
+}
+
+function moveBomberPlayer(grid, player, dx, dy) {
+  if (!player.bomberAlive) return;
+  const speed = BOMBER_SPEED * (BOMBER_TICK / 1000);
+  let nx = player.bomberX + dx * speed;
+  let ny = player.bomberY + dy * speed;
+  const R = BOMBER_PLAYER_R;
+  const blocked = (wx, wy) =>
+    bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx - R)) ||
+    bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx + R - 0.001)) ||
+    bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx - R)) ||
+    bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx + R - 0.001));
+
+  if (blocked(nx, player.bomberY)) {
+    nx = player.bomberX;
+    const tc = Math.floor(player.bomberY) + 0.5;
+    const nudgedY = player.bomberY + (tc - player.bomberY) * 0.3;
+    if (!blocked(player.bomberX, nudgedY)) player.bomberY = nudgedY;
+  }
+  if (blocked(nx, ny)) {
+    ny = player.bomberY;
+    const tc = Math.floor(player.bomberX) + 0.5;
+    const nudgedX = player.bomberX + (tc - player.bomberX) * 0.3;
+    if (!blocked(nudgedX, ny)) nx = nudgedX;
+  }
+  if (!blocked(nx, ny)) {
+    player.bomberX = nx;
+    player.bomberY = ny;
+  }
+}
+
+function placeBomberBomb(room, player) {
+  if (!player.bomberAlive) return;
+  const r = Math.round(player.bomberY - 0.5);
+  const c = Math.round(player.bomberX - 0.5);
+  if (room.bomberBombs.some((b) => b.r === r && b.c === c)) return;
+  room.bomberBombs.push({
+    r,
+    c,
+    timer: BOMBER_BOMB_MS,
+    ownerId: player.id,
+    range: 2,
+  });
+}
+
+function detonateBomberBomb(room, bomb) {
+  const grid = room.bomberGrid;
+  const now = Date.now();
+  const exp = {
+    tiles: [],
+    centerR: bomb.r,
+    centerC: bomb.c,
+    expiresAt: now + BOMBER_EXP_MS,
+  };
+  const dirs = [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  for (const [dr, dc] of dirs) {
+    const start = dr === 0 && dc === 0 ? 0 : 1;
+    const end = dr === 0 && dc === 0 ? 0 : bomb.range;
+    for (let i = start; i <= end; i++) {
+      const tr = bomb.r + dr * i,
+        tc = bomb.c + dc * i;
+      if (tr < 0 || tr >= BOMBER_ROWS || tc < 0 || tc >= BOMBER_COLS) break;
+      if (grid[tr][tc] === 1) break;
+      exp.tiles.push({ r: tr, c: tc });
+      if (grid[tr][tc] === 2) {
+        grid[tr][tc] = 0;
+        break;
+      }
+    }
+  }
+  room.bomberExplosions.push(exp);
+  const chains = room.bomberBombs.filter(
+    (b) => b !== bomb && exp.tiles.some((t) => t.r === b.r && t.c === b.c),
+  );
+  room.bomberBombs = room.bomberBombs.filter((b) => b !== bomb);
+  chains.forEach((b) => detonateBomberBomb(room, b));
+}
+
+function endBombermanRound(room, winnerId) {
+  room.bomberGameOver = true;
+  if (room._bomberLoop) {
+    clearInterval(room._bomberLoop);
+    room._bomberLoop = null;
+  }
+  if (room._bomberMaxTimer) {
+    clearTimeout(room._bomberMaxTimer);
+    room._bomberMaxTimer = null;
+  }
+  const winner = room.players.find((p) => p.id === winnerId);
+  if (winner) winner.score = (winner.score || 0) + 300;
+  room.roundResult = {
+    gameType: "bomberman",
+    winnerId: winnerId || null,
+    winnerName: winner ? winner.name : null,
+  };
+  broadcast(room.code);
+  setTimeout(() => {
+    if (!getRoom(room.code)) return;
+    room.phase = "results";
+    broadcast(room.code);
+  }, 2000);
+}
+
+function tickBomberman(room) {
+  if (!room || room.phase !== "bomberman") return;
+  const now = Date.now();
+  const inputs = room.bomberInputs || {};
+  for (const player of room.players.filter((p) => p.bomberAlive)) {
+    const inp = inputs[player.id] || { dx: 0, dy: 0, bomb: false };
+    if (inp.dx !== 0 || inp.dy !== 0)
+      moveBomberPlayer(room.bomberGrid, player, inp.dx, inp.dy);
+    if (inp.bomb) {
+      placeBomberBomb(room, player);
+      inputs[player.id] = { ...inp, bomb: false };
+    }
+  }
+  for (const bomb of [...room.bomberBombs]) {
+    bomb.timer -= BOMBER_TICK;
+    if (bomb.timer <= 0) detonateBomberBomb(room, bomb);
+  }
+  room.bomberExplosions = room.bomberExplosions.filter(
+    (e) => e.expiresAt > now,
+  );
+  for (const player of room.players.filter((p) => p.bomberAlive)) {
+    const tr = Math.floor(player.bomberY),
+      tc = Math.floor(player.bomberX);
+    if (
+      room.bomberExplosions.some((e) =>
+        e.tiles.some((t) => t.r === tr && t.c === tc),
+      )
+    ) {
+      player.bomberAlive = false;
+    }
+  }
+  const alive = room.players.filter((p) => p.bomberAlive);
+  if (room.players.length > 1 && alive.length <= 1 && !room.bomberGameOver) {
+    endBombermanRound(room, alive[0]?.id || null);
+  } else if (
+    room.players.length === 1 &&
+    alive.length === 0 &&
+    !room.bomberGameOver
+  ) {
+    endBombermanRound(room, null);
+  } else {
+    broadcast(room.code);
+  }
+}
+
+function startBombermanGame(room) {
+  const grid = generateBomberGrid();
+  room.bomberGrid = grid;
+  room.bomberBombs = [];
+  room.bomberExplosions = [];
+  room.bomberGameOver = false;
+  room.bomberInputs = {};
+  room.players.forEach((p, i) => {
+    const spawn = BOMBER_SPAWNS[i % BOMBER_SPAWNS.length];
+    p.bomberX = spawn.c + 0.5;
+    p.bomberY = spawn.r + 0.5;
+    p.bomberAlive = true;
+  });
+  room.phase = "bomberman";
+  broadcast(room.code);
+  room._bomberLoop = setInterval(() => tickBomberman(room), BOMBER_TICK);
+  room._bomberMaxTimer = setTimeout(() => {
+    if (!getRoom(room.code) || room.phase !== "bomberman") return;
+    const alive = room.players.filter((p) => p.bomberAlive);
+    endBombermanRound(room, alive.length === 1 ? alive[0].id : null);
+  }, BOMBER_MAX_TIME);
+}
+
 function sanitize(room) {
   const showAns = ["voting", "results", "matching"].includes(room.phase);
   let answers = null;
@@ -401,6 +657,9 @@ function sanitize(room) {
       avatar: p.avatar || null,
       hasAnswered: room.answers[p.id] !== undefined,
       hasVoted: room.votes[p.id] !== undefined,
+      bomberX: p.bomberX !== undefined ? p.bomberX : null,
+      bomberY: p.bomberY !== undefined ? p.bomberY : null,
+      bomberAlive: p.bomberAlive !== undefined ? p.bomberAlive : null,
     })),
     phase: room.phase,
     gameType: room.gameType,
@@ -431,6 +690,11 @@ function sanitize(room) {
     // Reaction Tap
     reactionFired: room.reactionFired ?? false,
     reactionTimes: room.reactionTimes ?? {},
+    // Bomberman
+    bomberGrid: room.bomberGrid ?? null,
+    bomberBombs: room.bomberBombs ?? [],
+    bomberExplosions: room.bomberExplosions ?? [],
+    bomberGameOver: room.bomberGameOver ?? false,
   };
 }
 
@@ -829,6 +1093,8 @@ function startRound(room) {
         if (getRoom(room.code) && room.phase === "reaction") resolveRound(room);
       }, 10000);
     }, delay);
+  } else if (gt === "bomberman") {
+    startBombermanGame(room);
   }
 }
 
@@ -1443,12 +1709,20 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("bomberman_input", ({ code, dx, dy, bomb }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "bomberman") return;
+    if (!room.bomberInputs) room.bomberInputs = {};
+    room.bomberInputs[socket.id] = { dx: dx || 0, dy: dy || 0, bomb: !!bomb };
+  });
+
   socket.on("disconnect", () => {
     Object.keys(rooms).forEach((code) => {
       const room = rooms[code];
       const idx = room.players.findIndex((p) => p.id === socket.id);
       if (idx === -1) return;
       room.players.splice(idx, 1);
+      if (room.bomberInputs) delete room.bomberInputs[socket.id];
       if (room.players.length === 0) {
         // Clean up arcade timers
         if (room._triviaTimer) clearTimeout(room._triviaTimer);
@@ -1456,6 +1730,8 @@ io.on("connection", (socket) => {
         if (room._bombTimer) clearTimeout(room._bombTimer);
         if (room._reactionDelay) clearTimeout(room._reactionDelay);
         if (room._reactionTimer) clearTimeout(room._reactionTimer);
+        if (room._bomberLoop) clearInterval(room._bomberLoop);
+        if (room._bomberMaxTimer) clearTimeout(room._bomberMaxTimer);
         delete rooms[code];
         return;
       }

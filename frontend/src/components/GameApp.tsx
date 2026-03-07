@@ -20,6 +20,7 @@ import TriviaBlitzScreen from "./screens/TriviaBlitzScreen";
 import DrawItScreen from "./screens/DrawItScreen";
 import WordBombScreen from "./screens/WordBombScreen";
 import ReactionTapScreen from "./screens/ReactionTapScreen";
+import BombermanScreen from "./screens/BombermanScreen";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -180,6 +181,10 @@ export default function GameApp() {
 
                     {phase === "reaction" && room && (
                         <ReactionTapScreen room={room} myId={myId} />
+                    )}
+
+                    {phase === "bomberman" && room && (
+                        <BombermanScreen room={room} myId={myId} />
                     )}
 
                     {phase === "results" && room && (
