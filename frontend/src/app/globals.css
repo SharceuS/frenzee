@@ -223,6 +223,8 @@ a, button, input, select, textarea, [role="button"], [tabindex] {
 
 /* ── Vote card ────────────────────────────────── */
 .vote-card {
+  overflow-wrap: break-word;
+  word-break: break-word;
   @apply transition-all duration-200 cursor-pointer rounded-2xl
   active:scale-95 select-none;
   padding: 14px 16px;
@@ -272,6 +274,8 @@ a, button, input, select, textarea, [role="button"], [tabindex] {
   padding: 14px 16px;
   background: rgba(255,255,255,0.06);
   border: 1.5px solid rgba(255,255,255,0.09);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* ── Score rows ───────────────────────────────── */

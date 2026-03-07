@@ -144,12 +144,16 @@ export default function DrawItScreen({ room, myId }: Props) {
                 className={`flex-shrink-0 px-4 py-2 rounded-2xl text-center ${isDrawer ? "bg-amber-500/20 border border-amber-500/40" : "bg-white/5 border border-white/10"}`}>
                 {isDrawer ? (
                     <div>
-                        <span className="font-nunito text-white/50 text-xs block mb-0.5">You are drawing:</span>
-                        <span className="font-fredoka text-2xl text-amber-300">{myWord ?? "…loading…"}</span>
+                        <span className="font-nunito text-white/50 text-xs block mb-0.5">Your secret word:</span>
+                        {myWord
+                            ? <span className="font-fredoka text-2xl text-amber-300">{myWord}</span>
+                            : <span className="font-fredoka text-lg text-white/40 animate-pulse">Getting your word… ✏️</span>
+                        }
                     </div>
                 ) : (
                     <div className="font-fredoka text-white text-base">
-                        {drawerName} is drawing <span className="text-white/40 text-sm font-nunito ml-1">· Guess what it is!</span>
+                        {drawerName} is drawing
+                        <span className="text-white/40 text-sm font-nunito ml-1">· Type your guess below!</span>
                     </div>
                 )}
             </motion.div>

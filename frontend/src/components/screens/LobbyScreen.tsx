@@ -301,7 +301,7 @@ const ALL_GAMES = [
         minPlayers: 2, maxPlayers: 12, duration: "~30 sec/round",
     },
     {
-        id: "draw_it", emoji: "🎨", title: "Draw It!", desc: "Scribble & guess",
+        id: "draw_it", emoji: "🎨", title: "Sketch & Guess", desc: "Draw it, others guess!",
         color: "#F59E0B", cat: "arcade",
         rules: [
             "One player draws a secret word on the canvas.",

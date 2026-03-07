@@ -122,6 +122,11 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         const rankings = (rr.rankings as { id: string; name: string; ms: number; rank: number }[]) ?? [];
         headline = rankings.length > 0 ? `${rankings[0]?.name ?? "?"} was fastest at ${rankings[0]?.ms ?? 0}ms!` : "No one tapped!";
         headlineEmoji = "⚡"; headlineColor = "border-green-500/40";
+    } else if (["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"].includes(gt)) {
+        const w = (rr.winnerIds as string[]) ?? [];
+        const emojis: Record<string, string> = { finish_the_sentence: "✏️", confessions: "🤫", whose_line: "💬", emoji_story: "📖", unhinged_advice: "🤪" };
+        headline = w.length > 0 ? w.map(id => getName(id)).join(" & ") + " got the most votes!" : "Everyone tied!";
+        headlineEmoji = emojis[gt] ?? "✨"; headlineColor = "border-purple-500/40";
     }
 
     return (
@@ -483,6 +488,32 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                                 {i === 0 && <span>🏆</span>}
                             </motion.div>
                         ))}
+                    </>
+                )}
+
+                {/* CREATIVE ANSWER GAMES: reveal who wrote what + vote counts */}
+                {["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"].includes(gt) && answers.length > 0 && (
+                    <>
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">🏆 Answers revealed</p>
+                        {[...answers]
+                            .sort((a, b) => a.playerId.localeCompare(b.playerId))
+                            .map((a, i) => {
+                                const vc = rr.voteCounts as Record<string, number>;
+                                const cnt = vc?.[a.playerId] ?? 0;
+                                const isWinner = (rr.winnerIds as string[])?.includes(a.playerId);
+                                return (
+                                    <motion.div key={a.playerId} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+                                        className={`answer-card ${isWinner ? "border-purple-500/50" : ""}`}
+                                        style={{ borderColor: isWinner ? "rgba(168,85,247,0.5)" : undefined }}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-nunito font-extrabold text-white/60 text-xs">{a.playerName}</span>
+                                            {isWinner && <span>🏆</span>}
+                                            {cnt > 0 && <span className="font-nunito text-purple-400 text-xs ml-auto">{cnt} vote{cnt !== 1 ? "s" : ""}</span>}
+                                        </div>
+                                        <p className="font-nunito text-white/85 text-sm leading-snug break-words">{a.answer as string}</p>
+                                    </motion.div>
+                                );
+                            })}
                     </>
                 )}
 

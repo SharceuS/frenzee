@@ -14,7 +14,14 @@ const VOTE_CONFIGS: Record<string, { emoji: string; title: string; subtitle: str
     two_truths: { emoji: "✌️", title: "Which is the Lie?", subtitle: "Spot the fake statement", btnLabel: "That's the Lie" },
     roast_room: { emoji: "🎭", title: "Vote the Funniest!", subtitle: "Which roast cracked you up?", btnLabel: "Vote Funniest" },
     debate_pit: { emoji: "⚔️", title: "Vote the Winner!", subtitle: "Who argued better?", btnLabel: "Vote" },
+    finish_the_sentence: { emoji: "✏️", title: "Best Finish!", subtitle: "Pick the most creative ending", btnLabel: "Vote" },
+    confessions: { emoji: "🤫", title: "Guess Who!", subtitle: "Whose confession is it?", btnLabel: "Vote" },
+    whose_line: { emoji: "💬", title: "Guess the Author!", subtitle: "Who do you think wrote this?", btnLabel: "Vote" },
+    emoji_story: { emoji: "📖", title: "Best Story!", subtitle: "Pick your favourite emoji story", btnLabel: "Vote" },
+    unhinged_advice: { emoji: "🤪", title: "Most Unhinged!", subtitle: "Pick the wildest advice", btnLabel: "Vote" },
 };
+
+const ANONYMOUS_VOTE_GAMES = ["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"];
 
 export default function VotingScreen({ room, myId, onVote }: Props) {
     const [voted, setVoted] = useState<string | null>(null);
@@ -116,13 +123,14 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                         </>
                     )}
 
-    // GUESS THE LIAR + ROAST ROOM: answers list then votes
+                    {/* GUESS THE LIAR + ROAST ROOM: show answer + player name */}
                     {(gt === "guess_the_liar" || gt === "roast_room") && answers.length > 0 && (
                         <>
                             <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">
                                 {gt === "guess_the_liar" ? "📝 All answers" : "🎭 All roasts"}
                             </p>
-                            {answers
+                            {[...answers]
+                                .sort((a, b) => a.playerId.localeCompare(b.playerId))
                                 .filter(a => gt === "guess_the_liar" ? a.playerId !== myId : true)
                                 .map((a, i) => (
                                     <motion.button key={a.playerId}
@@ -132,7 +140,27 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                         disabled={hasVoted || !canVote(a.playerId)}
                                         className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${(hasVoted && voted !== a.playerId) || !canVote(a.playerId) ? "opacity-40" : ""}`}>
                                         <p className="font-nunito text-white/40 text-xs mb-1">{a.playerName}</p>
-                                        <p className="font-nunito font-bold text-white text-base">{a.answer as string}</p>
+                                        <p className="font-nunito font-bold text-white text-base leading-snug break-words">{a.answer as string}</p>
+                                        {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
+                                    </motion.button>
+                                ))}
+                        </>
+                    )}
+
+                    {/* CREATIVE ANSWER GAMES: anonymous answers */}
+                    {ANONYMOUS_VOTE_GAMES.includes(gt) && answers.length > 0 && (
+                        <>
+                            <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">✏️ Pick your favourite</p>
+                            {[...answers]
+                                .sort((a, b) => a.playerId.localeCompare(b.playerId))
+                                .map((a, i) => (
+                                    <motion.button key={a.playerId}
+                                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.07 }}
+                                        onClick={() => handle(a.playerId)}
+                                        disabled={hasVoted}
+                                        className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${hasVoted && voted !== a.playerId ? "opacity-40" : ""}`}>
+                                        <p className="font-nunito font-bold text-white text-base leading-snug break-words">{a.answer as string}</p>
                                         {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
                                     </motion.button>
                                 ))}

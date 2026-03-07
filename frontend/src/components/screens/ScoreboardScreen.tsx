@@ -28,14 +28,14 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
     }, []);
 
     return (
-        <div className="page-fill overflow-y-auto gap-6 px-5 py-8">
+        <div className="page-fill overflow-y-auto gap-6 px-5 py-8 pb-28">
             {/* Trophy — overflow-visible so emoji doesn't get cut */}
             <motion.div
                 initial={{ scale: 0, rotate: -20 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 220, damping: 12 }}
                 className="text-center overflow-visible"
-                style={{ overflowClipMargin: "unset" }}
+                style={{ overflowClipMargin: "unset", marginTop: "50px" }}
             >
                 <div className="text-8xl animate-bounce-slow" style={{ lineHeight: 1.2, display: "inline-block" }}>🏆</div>
                 <h1 className="font-fredoka text-5xl text-white mt-2">Game Over!</h1>
@@ -95,21 +95,18 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
                 </div>
             </motion.div>
 
-            {/* Play again */}
-            {isHost ? (
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-                    className="w-full flex flex-col gap-3"
-                >
-                    <button className="btn-primary w-full" onClick={onPlayAgain}>
-                        🔄 Play Again!
-                    </button>
-                </motion.div>
-            ) : (
-                <div className="font-nunito text-white/40 text-center animate-pulse text-sm">
-                    Waiting for host to play again…
-                </div>
-            )}
+            {/* Fixed footer: play again */}
+            <motion.div
+                initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+                className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3"
+                style={{ background: "linear-gradient(to top, #0a0a1a 60%, transparent)" }}
+            >
+                {isHost ? (
+                    <button className="btn-primary w-full" onClick={onPlayAgain}>🔄 Play Again!</button>
+                ) : (
+                    <p className="font-nunito text-white/40 text-center animate-pulse text-sm">Waiting for host to play again…</p>
+                )}
+            </motion.div>
         </div>
     );
 }
