@@ -51,6 +51,12 @@ export interface Player {
   bomberX?: number | null;
   bomberY?: number | null;
   bomberAlive?: boolean | null;
+  bomberFromR?: number | null;
+  bomberFromC?: number | null;
+  bomberToR?: number | null;
+  bomberToC?: number | null;
+  bomberMoveProgress?: number | null;
+  bomberSpeedMult?: number | null;
 }
 
 export interface AnswerEntry {
@@ -107,5 +113,6 @@ export interface Room {
     centerC: number;
     expiresAt: number;
   }[];
+  bomberPowerups: { r: number; c: number; type: "range" | "speed" }[];
   bomberGameOver: boolean;
 }

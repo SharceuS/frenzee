@@ -396,8 +396,9 @@ const BOMBER_ROWS = 13;
 const BOMBER_TICK = 50;
 const BOMBER_SPEED = 7.0;
 const BOMBER_BOMB_MS = 3000;
-const BOMBER_EXP_MS = 2000;
+const BOMBER_EXP_MS = 750;
 const BOMBER_PLAYER_R = 0.36;
+const BOMBER_GRID_SPEED = 7.0; // tiles / second for grid movement
 const BOMBER_MAX_TIME = 180000;
 const BOMBER_SPAWNS = [
   { r: 1, c: 1 },
@@ -441,11 +442,11 @@ function generateBomberGrid() {
     }
   };
   BOMBER_SPAWNS.forEach(({ r, c }) => {
-    const dr = r < BOMBER_ROWS / 2 ? 1 : -1; // direction toward centre vertically
-    const dc = c < BOMBER_COLS / 2 ? 1 : -1; // direction toward centre horizontally
     safeClear(r, c); // spawn tile itself
-    safeClear(r + dr, c); // one step toward centre (vertical)
-    safeClear(r, c + dc); // one step toward centre (horizontal)
+    safeClear(r - 1, c); // above
+    safeClear(r + 1, c); // below
+    safeClear(r, c - 1); // left
+    safeClear(r, c + 1); // right
   });
   return grid;
 }
@@ -455,90 +456,26 @@ function bomberIsSolid(grid, r, c) {
   return grid[r][c] === 1 || grid[r][c] === 2;
 }
 
-function moveBomberPlayer(grid, player, dx, dy) {
-  if (!player.bomberAlive) return;
-  const step = BOMBER_SPEED * (BOMBER_TICK / 1000);
-  const R = BOMBER_PLAYER_R;
-
-  const blocked = (wx, wy) =>
-    bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx - R)) ||
-    bomberIsSolid(grid, Math.floor(wy - R), Math.floor(wx + R - 0.001)) ||
-    bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx - R)) ||
-    bomberIsSolid(grid, Math.floor(wy + R - 0.001), Math.floor(wx + R - 0.001));
-
-  const nx = player.bomberX + dx * step;
-  const ny = player.bomberY + dy * step;
-
-  // Try full diagonal move first
-  if (!blocked(nx, ny)) {
-    player.bomberX = nx;
-    player.bomberY = ny;
-    return;
-  }
-
-  // Try X-axis only
-  const canX = !blocked(nx, player.bomberY);
-  // Try Y-axis only
-  const canY = !blocked(player.bomberX, ny);
-
-  if (canX) {
-    player.bomberX = nx;
-    // Smooth nudge toward tile-centre on Y so player glides into corridors
-    const ty = Math.floor(player.bomberY) + 0.5;
-    const nudge = (ty - player.bomberY) * 0.35;
-    if (
-      Math.abs(nudge) > 0.0005 &&
-      !blocked(player.bomberX, player.bomberY + nudge)
-    )
-      player.bomberY += nudge;
-    return;
-  }
-
-  if (canY) {
-    player.bomberY = ny;
-    // Smooth nudge toward tile-centre on X
-    const tx = Math.floor(player.bomberX) + 0.5;
-    const nudge = (tx - player.bomberX) * 0.35;
-    if (
-      Math.abs(nudge) > 0.0005 &&
-      !blocked(player.bomberX + nudge, player.bomberY)
-    )
-      player.bomberX += nudge;
-    return;
-  }
-
-  // Fully blocked — still nudge toward corridor centre to avoid sticking to corners
-  if (dx !== 0) {
-    const ty = Math.floor(player.bomberY) + 0.5;
-    const nudge = (ty - player.bomberY) * 0.35;
-    if (
-      Math.abs(nudge) > 0.0005 &&
-      !blocked(player.bomberX, player.bomberY + nudge)
-    )
-      player.bomberY += nudge;
-  }
-  if (dy !== 0) {
-    const tx = Math.floor(player.bomberX) + 0.5;
-    const nudge = (tx - player.bomberX) * 0.35;
-    if (
-      Math.abs(nudge) > 0.0005 &&
-      !blocked(player.bomberX + nudge, player.bomberY)
-    )
-      player.bomberX += nudge;
-  }
+// Tile-level block check for grid movement (includes bombs)
+function bomberTileBlocked(grid, bombs, passBombKey, r, c) {
+  if (bomberIsSolid(grid, r, c)) return true;
+  return bombs.some(
+    (b) => b.r === r && b.c === c && `${b.r},${b.c}` !== passBombKey,
+  );
 }
 
 function placeBomberBomb(room, player) {
   if (!player.bomberAlive) return;
-  const r = Math.round(player.bomberY - 0.5);
-  const c = Math.round(player.bomberX - 0.5);
+  const r = player.bomberToR;
+  const c = player.bomberToC;
   if (room.bomberBombs.some((b) => b.r === r && b.c === c)) return;
+  player.bomberPassBombKey = `${r},${c}`;
   room.bomberBombs.push({
     r,
     c,
     timer: BOMBER_BOMB_MS,
     ownerId: player.id,
-    range: 2,
+    range: player.bomberRange || 1,
   });
 }
 
@@ -569,6 +506,16 @@ function detonateBomberBomb(room, bomb) {
       exp.tiles.push({ r: tr, c: tc });
       if (grid[tr][tc] === 2) {
         grid[tr][tc] = 0;
+        // 45% chance to drop a power-up on the freed tile
+        if (Math.random() < 0.45) {
+          if (!room.bomberPowerups) room.bomberPowerups = [];
+          const types = ["range", "speed"];
+          room.bomberPowerups.push({
+            r: tr,
+            c: tc,
+            type: types[Math.floor(Math.random() * types.length)],
+          });
+        }
         break;
       }
     }
@@ -609,11 +556,77 @@ function endBombermanRound(room, winnerId) {
 function tickBomberman(room) {
   if (!room || room.phase !== "bomberman") return;
   const now = Date.now();
+  const grid = room.bomberGrid;
   const inputs = room.bomberInputs || {};
+
+  // Grid-based movement: advance each player's tile transition
   for (const player of room.players.filter((p) => p.bomberAlive)) {
     const inp = inputs[player.id] || { dx: 0, dy: 0, bomb: false };
-    if (inp.dx !== 0 || inp.dy !== 0)
-      moveBomberPlayer(room.bomberGrid, player, inp.dx, inp.dy);
+    const speedMult = player.bomberSpeedMult || 1;
+    const progressStep = BOMBER_GRID_SPEED * speedMult * (BOMBER_TICK / 1000);
+
+    // Single direction from input (no diagonal; vertical wins)
+    let ndr = Math.sign(Math.round(inp.dy || 0));
+    let ndc = Math.sign(Math.round(inp.dx || 0));
+    if (ndr !== 0 && ndc !== 0) ndc = 0;
+
+    if (player.bomberMoveProgress < 1.0) {
+      player.bomberMoveProgress += progressStep;
+      if (player.bomberMoveProgress >= 1.0) {
+        const overflow = player.bomberMoveProgress - 1.0;
+        player.bomberFromR = player.bomberToR;
+        player.bomberFromC = player.bomberToC;
+        // Clear pass key once player leaves the bomb tile
+        if (player.bomberPassBombKey) {
+          const [pr, pc] = player.bomberPassBombKey.split(",").map(Number);
+          if (player.bomberFromR !== pr || player.bomberFromC !== pc)
+            player.bomberPassBombKey = null;
+        }
+        // Continue movement if direction still held
+        if (
+          (ndr !== 0 || ndc !== 0) &&
+          !bomberTileBlocked(
+            grid,
+            room.bomberBombs,
+            player.bomberPassBombKey,
+            player.bomberFromR + ndr,
+            player.bomberFromC + ndc,
+          )
+        ) {
+          player.bomberToR = player.bomberFromR + ndr;
+          player.bomberToC = player.bomberFromC + ndc;
+          player.bomberMoveProgress = Math.max(0, overflow);
+        } else {
+          player.bomberMoveProgress = 1.0;
+          player.bomberToR = player.bomberFromR;
+          player.bomberToC = player.bomberFromC;
+        }
+      }
+    } else {
+      // Stationary — start move on input
+      if (
+        (ndr !== 0 || ndc !== 0) &&
+        !bomberTileBlocked(
+          grid,
+          room.bomberBombs,
+          player.bomberPassBombKey,
+          player.bomberFromR + ndr,
+          player.bomberFromC + ndc,
+        )
+      ) {
+        player.bomberToR = player.bomberFromR + ndr;
+        player.bomberToC = player.bomberFromC + ndc;
+        player.bomberMoveProgress = progressStep;
+      }
+    }
+
+    // Derive X/Y from grid lerp (used for explosion checks below)
+    const t = Math.min(player.bomberMoveProgress, 1.0);
+    player.bomberX =
+      player.bomberFromC + 0.5 + (player.bomberToC - player.bomberFromC) * t;
+    player.bomberY =
+      player.bomberFromR + 0.5 + (player.bomberToR - player.bomberFromR) * t;
+
     if (inp.bomb) {
       placeBomberBomb(room, player);
       inputs[player.id] = { ...inp, bomb: false };
@@ -627,14 +640,33 @@ function tickBomberman(room) {
     (e) => e.expiresAt > now,
   );
   for (const player of room.players.filter((p) => p.bomberAlive)) {
-    const tr = Math.floor(player.bomberY),
-      tc = Math.floor(player.bomberX);
+    const tr = player.bomberToR ?? Math.floor(player.bomberY),
+      tc = player.bomberToC ?? Math.floor(player.bomberX);
     if (
       room.bomberExplosions.some((e) =>
         e.tiles.some((t) => t.r === tr && t.c === tc),
       )
     ) {
       player.bomberAlive = false;
+    }
+    // Power-up pickup — check tile player is standing on
+    if (room.bomberPowerups) {
+      const pr = player.bomberToR ?? Math.round(player.bomberY - 0.5);
+      const pc = player.bomberToC ?? Math.round(player.bomberX - 0.5);
+      const puIdx = room.bomberPowerups.findIndex(
+        (p) => p.r === pr && p.c === pc,
+      );
+      if (puIdx !== -1) {
+        const pu = room.bomberPowerups[puIdx];
+        room.bomberPowerups.splice(puIdx, 1);
+        if (pu.type === "range")
+          player.bomberRange = Math.min((player.bomberRange || 1) + 1, 7);
+        if (pu.type === "speed")
+          player.bomberSpeedMult = Math.min(
+            (player.bomberSpeedMult || 1) + 0.075,
+            1.35,
+          );
+      }
     }
   }
   const alive = room.players.filter((p) => p.bomberAlive);
@@ -656,13 +688,22 @@ function startBombermanGame(room) {
   room.bomberGrid = grid;
   room.bomberBombs = [];
   room.bomberExplosions = [];
+  room.bomberPowerups = [];
   room.bomberGameOver = false;
   room.bomberInputs = {};
   room.players.forEach((p, i) => {
     const spawn = BOMBER_SPAWNS[i % BOMBER_SPAWNS.length];
+    p.bomberFromR = spawn.r;
+    p.bomberFromC = spawn.c;
+    p.bomberToR = spawn.r;
+    p.bomberToC = spawn.c;
+    p.bomberMoveProgress = 1.0; // stationary
     p.bomberX = spawn.c + 0.5;
     p.bomberY = spawn.r + 0.5;
     p.bomberAlive = true;
+    p.bomberRange = 1;
+    p.bomberSpeedMult = 1;
+    p.bomberPassBombKey = null;
   });
   room.phase = "bomberman";
   broadcast(room.code);
@@ -701,6 +742,12 @@ function sanitize(room) {
       bomberX: p.bomberX !== undefined ? p.bomberX : null,
       bomberY: p.bomberY !== undefined ? p.bomberY : null,
       bomberAlive: p.bomberAlive !== undefined ? p.bomberAlive : null,
+      bomberFromR: p.bomberFromR ?? null,
+      bomberFromC: p.bomberFromC ?? null,
+      bomberToR: p.bomberToR ?? null,
+      bomberToC: p.bomberToC ?? null,
+      bomberMoveProgress: p.bomberMoveProgress ?? null,
+      bomberSpeedMult: p.bomberSpeedMult ?? null,
     })),
     phase: room.phase,
     gameType: room.gameType,
@@ -735,6 +782,7 @@ function sanitize(room) {
     bomberGrid: room.bomberGrid ?? null,
     bomberBombs: room.bomberBombs ?? [],
     bomberExplosions: room.bomberExplosions ?? [],
+    bomberPowerups: room.bomberPowerups ?? [],
     bomberGameOver: room.bomberGameOver ?? false,
   };
 }
@@ -1755,6 +1803,10 @@ io.on("connection", (socket) => {
     if (!room || room.phase !== "bomberman") return;
     if (!room.bomberInputs) room.bomberInputs = {};
     room.bomberInputs[socket.id] = { dx: dx || 0, dy: dy || 0, bomb: !!bomb };
+  });
+
+  socket.on("ping_bomber", ({ ts }) => {
+    socket.emit("pong_bomber", { ts });
   });
 
   socket.on("disconnect", () => {
