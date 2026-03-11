@@ -59,6 +59,30 @@ a, button, input, select, textarea, [role="button"], [tabindex] {
   66%      { transform: translate(-18px, 18px) scale(0.93); }
 }
 
+/* ── Background images (home screen) ─────────── */
+.home-bg-mobile {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background-image: url('/images/bg.jpg');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+.home-bg-desk {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background-image: url('/images/bg-desk.jpg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+@media (min-width: 769px) {
+  .home-bg-mobile { display: none; }
+  .home-bg-desk   { display: block; }
+}
+
 /* ── Page layout ──────────────────────────────── */
 .page-wrap {
   width: 100%;

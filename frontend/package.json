@@ -8,13 +8,15 @@
     "start": "next start -p 3001"
   },
   "dependencies": {
+    "@types/three": "^0.183.1",
     "canvas-confetti": "^1.9.2",
     "clsx": "^2.1.0",
     "framer-motion": "^11.0.3",
     "next": "^16.1.6",
     "react": "^18",
     "react-dom": "^18",
-    "socket.io-client": "^4.6.1"
+    "socket.io-client": "^4.6.1",
+    "three": "^0.183.2"
   },
   "devDependencies": {
     "@types/node": "^20",

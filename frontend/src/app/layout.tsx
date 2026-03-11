@@ -2,15 +2,15 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "Pocket Party 🎉",
-    description: "The ultimate multiplayer party game — Guess the Liar and more!",
+    title: "Frenzee 🎉",
+    description: "The ultimate mobile party game — 26 games, infinite fun!",
 };
 
 export const viewport: Viewport = {
     width: "device-width",
     initialScale: 1,
     maximumScale: 1,
-    themeColor: "#0F0A1E",
+    themeColor: "#080414",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
