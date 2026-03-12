@@ -77,8 +77,7 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
     const pal = AVATAR_PALETTES[avatar.color % AVATAR_PALETTES.length];
 
     return (
-        <div style={{ minHeight: "100svh", position: "relative", overflow: "hidden" }}>
-
+        <div style={{ position: "relative", width: "100%", minHeight: "100svh" }}>
             {/* ── Background image ──────────────────────────────────── */}
             <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
                 <div className="home-bg-mobile" />

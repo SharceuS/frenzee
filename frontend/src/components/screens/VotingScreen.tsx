@@ -21,7 +21,8 @@ const VOTE_CONFIGS: Record<string, { emoji: string; title: string; subtitle: str
     unhinged_advice: { emoji: "🤪", title: "Most Unhinged!", subtitle: "Pick the wildest advice", btnLabel: "Vote" },
 };
 
-const ANONYMOUS_VOTE_GAMES = ["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"];
+// All answer-based voting games are anonymous to prevent bias
+const ANONYMOUS_VOTE_GAMES = ["roast_room", "finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"];
 
 export default function VotingScreen({ room, myId, onVote }: Props) {
     const [voted, setVoted] = useState<string | null>(null);
@@ -44,12 +45,14 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
         ? answers.filter(a => room.debaterIds?.includes(a.playerId))
         : [];
 
-    // Can't vote for yourself in GTL; spotlight can't vote in 2T; debaters can't vote in DP
+    // Voting eligibility rules
     const canVote = (targetId: string) => {
         if (gt === "guess_the_liar") return targetId !== myId;
         if (gt === "two_truths") return myId !== room.spotlightId;
         if (gt === "debate_pit") return !room.debaterIds?.includes(myId);
-        return true;
+        // Prevent self-voting in all answer-based games
+        if (ANONYMOUS_VOTE_GAMES.includes(gt)) return targetId !== myId;
+        return targetId !== myId;
     };
 
     const handle = (targetId: string) => {
@@ -123,15 +126,13 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                         </>
                     )}
 
-                    {/* GUESS THE LIAR + ROAST ROOM: show answer + player name */}
-                    {(gt === "guess_the_liar" || gt === "roast_room") && answers.length > 0 && (
+                    {/* GUESS THE LIAR: show answer + player name */}
+                    {gt === "guess_the_liar" && answers.length > 0 && (
                         <>
-                            <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">
-                                {gt === "guess_the_liar" ? "📝 All answers" : "🎭 All roasts"}
-                            </p>
+                            <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">📝 All answers</p>
                             {[...answers]
                                 .sort((a, b) => a.playerId.localeCompare(b.playerId))
-                                .filter(a => gt === "guess_the_liar" ? a.playerId !== myId : true)
+                                .filter(a => a.playerId !== myId)
                                 .map((a, i) => (
                                     <motion.button key={a.playerId}
                                         initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
@@ -153,6 +154,7 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                             <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">✏️ Pick your favourite</p>
                             {[...answers]
                                 .sort((a, b) => a.playerId.localeCompare(b.playerId))
+                                .filter(a => a.playerId !== myId)
                                 .map((a, i) => (
                                     <motion.button key={a.playerId}
                                         initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}

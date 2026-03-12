@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Room } from "@/lib/types";
 import GameInfoModal from "@/components/GameInfoModal";
@@ -359,7 +359,15 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
     const [rounds, setRounds] = useState(5);
     const [tab, setTab] = useState<"popular" | "original" | "arcade">("popular");
     const [infoGame, setInfoGame] = useState<typeof ALL_GAMES[0] | null>(null);
-    const selected = room.gameType;
+    // Optimistic selection: host sees instant feedback without waiting for server round-trip
+    const [optimisticGame, setOptimisticGame] = useState<string | null>(null);
+
+    // Sync optimistic state when server confirms
+    useEffect(() => {
+        if (room.gameType) setOptimisticGame(null);
+    }, [room.gameType]);
+
+    const selected = optimisticGame ?? room.gameType;
     const canStart = room.players.length >= 2 && !!selected;
     const filtered = ALL_GAMES.filter(g => g.cat === tab);
     const meta = CAT_META[tab];
@@ -385,7 +393,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 </div>
 
                 {/* ─── Players row ─── */}
-                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0" style={{ scrollbarWidth: "none" }}>
+                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0" style={{ scrollbarWidth: "none", padding: "5px" }}>
                     <AnimatePresence mode="popLayout">
                         {room.players.map((p, i) => (
                             <motion.div key={p.id}
@@ -394,14 +402,19 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                                 exit={{ scale: 0, opacity: 0 }}
                                 transition={{ delay: i * 0.04, type: "spring", stiffness: 300 }}
                                 className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                                {/* overflow-hidden + fixed size prevents the avatar SVG from being clipped/cut */}
-                                <div className={`w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 ${p.isHost ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-black" : ""
-                                    }`}>
-                                    <SvgAvatar
-                                        config={p.avatar ?? defaultAvatarFromId(p.id)}
-                                        size={48}
-                                    />
-                                </div>
+                                {/* Outer div handles the ring (animated for host); inner div handles overflow clipping */}
+                                <motion.div
+                                    className={`rounded-2xl flex-shrink-0 ${p.isHost ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#0C0818]" : ""}`}
+                                    animate={p.isHost ? { boxShadow: ["0 0 0px rgba(234,179,8,0.2)", "0 0 10px rgba(234,179,8,0.9)", "0 0 0px rgba(234,179,8,0.2)"] } : {}}
+                                    transition={p.isHost ? { duration: 1.4, repeat: Infinity, ease: "easeInOut" } : {}}
+                                >
+                                    <div className="w-12 h-12 rounded-2xl overflow-hidden">
+                                        <SvgAvatar
+                                            config={p.avatar ?? defaultAvatarFromId(p.id)}
+                                            size={48}
+                                        />
+                                    </div>
+                                </motion.div>
                                 <span className="font-nunito text-xs text-white/55 leading-none max-w-[48px] truncate text-center">
                                     {p.id === myId ? "you" : p.name.split(" ")[0]}
                                 </span>
@@ -465,6 +478,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                                                 onClick={() => {
                                                     if (!isHost) return;
                                                     sfxSelect();
+                                                    setOptimisticGame(g.id); // instant local feedback
                                                     onSelectGame(g.id);
                                                 }}>
                                                 <div className="text-4xl mb-2"

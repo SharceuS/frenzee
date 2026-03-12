@@ -393,9 +393,9 @@ function pickQ(array, room) {
 // ══════════════════════════════════════
 const BOMBER_COLS = 15;
 const BOMBER_ROWS = 13;
-const BOMBER_TICK = 50;
+const BOMBER_TICK = 33;          // ~30fps server loop (was 50ms/20fps)
 const BOMBER_SPEED = 7.0;
-const BOMBER_BOMB_MS = 3000;
+const BOMBER_BOMB_MS = 2000;     // shorter fuse (was 3000ms)
 const BOMBER_EXP_MS = 750;
 const BOMBER_PLAYER_R = 0.36;
 const BOMBER_GRID_SPEED = 7.0; // tiles / second for grid movement
@@ -506,6 +506,7 @@ function detonateBomberBomb(room, bomb) {
       exp.tiles.push({ r: tr, c: tc });
       if (grid[tr][tc] === 2) {
         grid[tr][tc] = 0;
+        room.bomberGridDirty = true; // mark grid as changed for next broadcast
         // 45% chance to drop a power-up on the freed tile
         if (Math.random() < 0.45) {
           if (!room.bomberPowerups) room.bomberPowerups = [];
@@ -686,6 +687,7 @@ function tickBomberman(room) {
 function startBombermanGame(room) {
   const grid = generateBomberGrid();
   room.bomberGrid = grid;
+  room.bomberGridDirty = true; // send full grid on first broadcast
   room.bomberBombs = [];
   room.bomberExplosions = [];
   room.bomberPowerups = [];
@@ -778,7 +780,7 @@ function sanitize(room) {
     // Reaction Tap
     reactionFired: room.reactionFired ?? false,
     reactionTimes: room.reactionTimes ?? {},
-    // Bomberman
+    // Bomberman — always send the grid so late-mounting clients (AnimatePresence delay) never miss it
     bomberGrid: room.bomberGrid ?? null,
     bomberBombs: room.bomberBombs ?? [],
     bomberExplosions: room.bomberExplosions ?? [],
@@ -1517,10 +1519,18 @@ function resolveRound(room) {
     }
     const times = room.reactionTimes || {};
     const sorted = Object.entries(times).sort(([, a], [, b]) => a - b);
-    const pts = [1000, 800, 600, 400];
-    sorted.forEach(([id], rank) => {
+    // Range-based scoring: everyone gets points based on their actual speed
+    function reactionPts(ms) {
+      if (ms < 150) return 1000;
+      if (ms < 250) return 900;
+      if (ms < 350) return 750;
+      if (ms < 500) return 600;
+      if (ms < 750) return 450;
+      return 300;
+    }
+    sorted.forEach(([id, ms]) => {
       const p = room.players.find((x) => x.id === id);
-      if (p) p.score += pts[rank] ?? 300;
+      if (p) p.score += reactionPts(ms);
     });
     result = {
       rankings: sorted.map(([id, ms], rank) => ({
@@ -1639,6 +1649,12 @@ io.on("connection", (socket) => {
       if (room.debaterIds.includes(socket.id)) return;
       if (!room.debaterIds.includes(targetId)) return;
     }
+    // Prevent self-voting in all answer-based games
+    const answerVoteGames = [
+      "roast_room", "finish_the_sentence", "confessions",
+      "whose_line", "emoji_story", "unhinged_advice",
+    ];
+    if (answerVoteGames.includes(room.gameType) && socket.id === targetId) return;
     room.votes[socket.id] = targetId;
     broadcast(code);
     if (checkAllVoted(room)) resolveRound(room);
@@ -1689,6 +1705,15 @@ io.on("connection", (socket) => {
     if (!room || room.phase !== "drawing" || socket.id !== room.drawItDrawerId)
       return;
     io.to(code).emit("draw_clear");
+  });
+
+  // Drawer re-requests their word (handles race condition where draw_your_word
+  // fires before the DrawItScreen component has mounted its socket listener)
+  socket.on("draw_request_word", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || room.phase !== "drawing") return;
+    if (socket.id !== room.drawItDrawerId) return;
+    socket.emit("draw_your_word", { word: room.drawItWord, diff: null });
   });
 
   socket.on("draw_guess", ({ code, word }) => {
@@ -1782,12 +1807,16 @@ io.on("connection", (socket) => {
   });
 
   // ── REACTION TAP events ────────────────────────────────────────────────────
-  socket.on("reaction_tap", ({ code }) => {
+  socket.on("reaction_tap", ({ code, clientMs }) => {
     const room = getRoom(code);
     if (!room || room.phase !== "reaction" || !room.reactionFired) return;
     if (room.reactionTimes[socket.id] !== undefined) return;
-    room.reactionTimes[socket.id] =
-      Date.now() - (room.reactionStartTime || Date.now());
+    // Use the client-measured time (from when they saw the flash to when they tapped).
+    // This is fairer than server-side calculation which would include network latency.
+    const ms = typeof clientMs === "number" && clientMs >= 0 && clientMs < 30000
+      ? Math.round(clientMs)
+      : Date.now() - (room.reactionStartTime || Date.now());
+    room.reactionTimes[socket.id] = ms;
     broadcast(code);
     if (Object.keys(room.reactionTimes).length >= room.players.length) {
       if (room._reactionTimer) {

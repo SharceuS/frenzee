@@ -9,6 +9,7 @@ const BOMBER_COLS = 15;
 const BOMBER_ROWS = 13;
 const BOMBER_GRID_SPEED = 7.0; // tiles / second (must match server)
 const PLAYER_COLORS = ["#7C3AED", "#EF4444", "#10B981", "#F59E0B"];
+const BOMBER_BOMB_MS = 2000; // must match server BOMBER_BOMB_MS
 
 interface Props { room: Room; myId: string; }
 
@@ -46,12 +47,18 @@ export default function BombermanScreen({ room, myId }: Props) {
     const bombQueueRef = useRef(false);
     const latencyRef = useRef<number>(0); // round-trip time in ms    
     const localPassBombRef = useRef<string | null>(null); // bomb tile key player can still walk through
+    // Cached grid — only updated when server sends a new one (null means no change)
+    const gridCacheRef = useRef<number[][] | null>(null);
     // My predicted grid state (60fps); null until server gives us first position
     const localGridRef = useRef<{ fromR: number; fromC: number; toR: number; toC: number; progress: number } | null>(null);
 
-    // Keep roomRef up-to-date and reconcile localGridRef with server every tick
+    // Keep roomRef up-to-date, cache grid when server sends it, reconcile prediction
     useEffect(() => {
         roomRef.current = room;
+        // Cache grid whenever server sends it (only sent on init + wall changes)
+        if (room.bomberGrid) {
+            gridCacheRef.current = room.bomberGrid;
+        }
         const me = room.players.find(p => p.id === myId);
         if (me?.bomberFromR != null && me.bomberToR != null) {
             if (localGridRef.current === null) {
@@ -104,8 +111,12 @@ export default function BombermanScreen({ room, myId }: Props) {
             KeyA: "left", KeyD: "right", KeyW: "up", KeyS: "down",
         };
         const down = (e: KeyboardEvent) => {
-            if (KEYS[e.code]) { e.preventDefault(); dirsRef.current.add(KEYS[e.code]); }
-            if (e.code === "Space") { e.preventDefault(); bombQueueRef.current = true; }
+            if (KEYS[e.code]) {
+                e.preventDefault();
+                dirsRef.current.add(KEYS[e.code]);
+                flushInput(); // send immediately so server reacts at once
+            }
+            if (e.code === "Space") { e.preventDefault(); bombQueueRef.current = true; flushInput(true); }
         };
         const up = (e: KeyboardEvent) => {
             if (KEYS[e.code]) {
@@ -125,7 +136,7 @@ export default function BombermanScreen({ room, myId }: Props) {
             lastTimeRef.current = ts;
 
             const r = roomRef.current;
-            const grid = r.bomberGrid;
+            const grid = gridCacheRef.current ?? r.bomberGrid; // use cached grid
             const me = r.players.find(p => p.id === myId);
             const bombs = r.bomberBombs ?? [];
 
@@ -207,7 +218,7 @@ export default function BombermanScreen({ room, myId }: Props) {
                 if (canvas.width !== W) canvas.width = W;
                 if (canvas.height !== H) canvas.height = H;
                 const ctx = canvas.getContext("2d");
-                if (ctx) drawBomberman(ctx, T, r, myId, localGridRef.current, latencyRef.current);
+                if (ctx) drawBomberman(ctx, T, r, myId, localGridRef.current, latencyRef.current, gridCacheRef.current);
             }
 
             rafRef.current = requestAnimationFrame(loop);
@@ -221,6 +232,7 @@ export default function BombermanScreen({ room, myId }: Props) {
         onPointerDown: (e: React.PointerEvent) => {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
             dirsRef.current.add(dir);
+            flushInput(); // immediate send on touch — critical for mobile responsiveness
         },
         onPointerUp: () => { dirsRef.current.delete(dir); flushInput(); },
         onPointerLeave: () => { dirsRef.current.delete(dir); flushInput(); },
@@ -330,9 +342,12 @@ function drawBomberman(
     room: Room,
     myId: string,
     localGrid: { fromR: number; fromC: number; toR: number; toC: number; progress: number } | null,
-    latencyMs: number
+    latencyMs: number,
+    gridCache: number[][] | null
 ) {
-    const grid = room.bomberGrid!;
+    // Use the cached grid (server only sends it when it changes)
+    const grid = gridCache ?? room.bomberGrid;
+    if (!grid) return; // grid not received yet
     const now = Date.now();
 
     // Background (floor colour — visible in the 1-px gap around every wall tile)
@@ -414,7 +429,7 @@ function drawBomberman(
         const cx = (bomb.c + 0.5) * T;
         const cy = (bomb.r + 0.5) * T;
         // progress: 0=just placed, 1=about to explode
-        const progress = Math.max(0, Math.min(1, 1 - bomb.timer / 3000));
+        const progress = Math.max(0, Math.min(1, 1 - bomb.timer / BOMBER_BOMB_MS));
         const pulse = progress > 0.67 ? 0.88 + 0.12 * Math.sin(now / (progress > 0.9 ? 55 : 90)) : 1;
         const radius = T * 0.38 * pulse;
 

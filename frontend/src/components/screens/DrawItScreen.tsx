@@ -65,6 +65,19 @@ export default function DrawItScreen({ room, myId }: Props) {
         };
     }, [socket, myId, room.players]);
 
+    // If we're the drawer and haven't received our word yet, request it from the server.
+    // This covers the race condition where draw_your_word fires before this component mounts.
+    useEffect(() => {
+        if (!socket || !isDrawer) return;
+        // Request immediately, then retry after 600ms in case first request races with mount
+        socket.emit("draw_request_word", { code: room.code });
+        const retry = setTimeout(() => {
+            socket.emit("draw_request_word", { code: room.code });
+        }, 600);
+        return () => clearTimeout(retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [socket, isDrawer]);
+
     // Canvas helpers
     const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 

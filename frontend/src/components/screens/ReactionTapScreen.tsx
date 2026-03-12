@@ -16,9 +16,8 @@ export default function ReactionTapScreen({ room, myId }: Props) {
     const hasTapped = useRef(false);
 
     const fired = room.reactionFired;
-    // Use server-recorded time once available (eliminates client/server clock drift)
-    const serverTime = room.reactionTimes?.[myId];
-    const displayTime = serverTime ?? myTime;
+    // Prioritise our own locally-measured time — only fall back to server if we haven't tapped yet
+    const displayTime = myTime ?? room.reactionTimes?.[myId] ?? null;
     const tapCount = Object.keys(room.reactionTimes ?? {}).length;
     const totalPlayers = room.players.length;
 
@@ -48,7 +47,8 @@ export default function ReactionTapScreen({ room, myId }: Props) {
         const localTime = tapStartRef.current ? Date.now() - tapStartRef.current : 0;
         setMyTime(localTime);
         setTapped(true);
-        socket?.emit("reaction_tap", { code: room.code });
+        // Send the client-measured time so server stores it directly (avoids network latency skew)
+        socket?.emit("reaction_tap", { code: room.code, clientMs: localTime });
     };
 
     const getRankEmoji = (ms: number) => {
