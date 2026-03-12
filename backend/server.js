@@ -37,6 +37,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
+  perMessageDeflate: true,
 });
 
 // ══════════════════════════════════════
@@ -393,7 +394,7 @@ function pickQ(array, room) {
 // ══════════════════════════════════════
 const BOMBER_COLS = 15;
 const BOMBER_ROWS = 13;
-const BOMBER_TICK = 33;          // ~30fps server loop (was 50ms/20fps)
+const BOMBER_TICK = 50;          // 20fps — enough for a casual party Bomberman
 const BOMBER_SPEED = 7.0;
 const BOMBER_BOMB_MS = 2000;     // shorter fuse (was 3000ms)
 const BOMBER_EXP_MS = 750;
@@ -554,11 +555,34 @@ function endBombermanRound(room, winnerId) {
   }, 2000);
 }
 
+// Emit only the lightweight Bomberman state (players/bombs/explosions/powerups).
+// The grid is sent separately via bomber_grid only when it actually changes.
+function broadcastBomberState(room) {
+  const payload = {
+    players: room.players.map((p) => ({
+      id: p.id,
+      fromR: p.bomberFromR ?? null,
+      fromC: p.bomberFromC ?? null,
+      toR: p.bomberToR ?? null,
+      toC: p.bomberToC ?? null,
+      progress: p.bomberMoveProgress ?? 1,
+      speedMult: p.bomberSpeedMult ?? 1,
+      alive: p.bomberAlive ?? true,
+    })),
+    bombs: room.bomberBombs,
+    explosions: room.bomberExplosions,
+    powerups: room.bomberPowerups,
+    gameOver: room.bomberGameOver,
+  };
+  io.to(room.code).emit("bomber_state", payload);
+}
+
 function tickBomberman(room) {
   if (!room || room.phase !== "bomberman") return;
   const now = Date.now();
   const grid = room.bomberGrid;
   const inputs = room.bomberInputs || {};
+  let dirty = false; // track whether anything worth broadcasting changed
 
   // Grid-based movement: advance each player's tile transition
   for (const player of room.players.filter((p) => p.bomberAlive)) {
@@ -629,17 +653,22 @@ function tickBomberman(room) {
       player.bomberFromR + 0.5 + (player.bomberToR - player.bomberFromR) * t;
 
     if (inp.bomb) {
+      const before = room.bomberBombs.length;
       placeBomberBomb(room, player);
+      if (room.bomberBombs.length !== before) dirty = true;
       inputs[player.id] = { ...inp, bomb: false };
     }
+    dirty = true; // player position updated
   }
   for (const bomb of [...room.bomberBombs]) {
     bomb.timer -= BOMBER_TICK;
-    if (bomb.timer <= 0) detonateBomberBomb(room, bomb);
+    if (bomb.timer <= 0) { detonateBomberBomb(room, bomb); dirty = true; }
   }
+  const expBefore = room.bomberExplosions.length;
   room.bomberExplosions = room.bomberExplosions.filter(
     (e) => e.expiresAt > now,
   );
+  if (room.bomberExplosions.length !== expBefore) dirty = true;
   for (const player of room.players.filter((p) => p.bomberAlive)) {
     const tr = player.bomberToR ?? Math.floor(player.bomberY),
       tc = player.bomberToC ?? Math.floor(player.bomberX);
@@ -667,6 +696,7 @@ function tickBomberman(room) {
             (player.bomberSpeedMult || 1) + 0.075,
             1.35,
           );
+        dirty = true;
       }
     }
   }
@@ -680,14 +710,19 @@ function tickBomberman(room) {
   ) {
     endBombermanRound(room, null);
   } else {
-    broadcast(room.code);
+    // Send grid separately only when walls changed (bomb destroyed a crate)
+    if (room.bomberGridDirty) {
+      room.bomberGridDirty = false;
+      io.to(room.code).emit("bomber_grid", room.bomberGrid);
+    }
+    if (dirty) broadcastBomberState(room);
   }
 }
 
 function startBombermanGame(room) {
   const grid = generateBomberGrid();
   room.bomberGrid = grid;
-  room.bomberGridDirty = true; // send full grid on first broadcast
+  room.bomberGridDirty = false; // sent explicitly below
   room.bomberBombs = [];
   room.bomberExplosions = [];
   room.bomberPowerups = [];
@@ -699,7 +734,7 @@ function startBombermanGame(room) {
     p.bomberFromC = spawn.c;
     p.bomberToR = spawn.r;
     p.bomberToC = spawn.c;
-    p.bomberMoveProgress = 1.0; // stationary
+    p.bomberMoveProgress = 1.0;
     p.bomberX = spawn.c + 0.5;
     p.bomberY = spawn.r + 0.5;
     p.bomberAlive = true;
@@ -708,7 +743,12 @@ function startBombermanGame(room) {
     p.bomberPassBombKey = null;
   });
   room.phase = "bomberman";
+  // Phase change first so clients mount BombermanScreen
   broadcast(room.code);
+  // Grid as its own event (sent once; only re-sent when a crate is destroyed)
+  io.to(room.code).emit("bomber_grid", room.bomberGrid);
+  // Initial lightweight state so players appear immediately
+  broadcastBomberState(room);
   room._bomberLoop = setInterval(() => tickBomberman(room), BOMBER_TICK);
   room._bomberMaxTimer = setTimeout(() => {
     if (!getRoom(room.code) || room.phase !== "bomberman") return;
@@ -741,15 +781,6 @@ function sanitize(room) {
       avatar: p.avatar || null,
       hasAnswered: room.answers[p.id] !== undefined,
       hasVoted: room.votes[p.id] !== undefined,
-      bomberX: p.bomberX !== undefined ? p.bomberX : null,
-      bomberY: p.bomberY !== undefined ? p.bomberY : null,
-      bomberAlive: p.bomberAlive !== undefined ? p.bomberAlive : null,
-      bomberFromR: p.bomberFromR ?? null,
-      bomberFromC: p.bomberFromC ?? null,
-      bomberToR: p.bomberToR ?? null,
-      bomberToC: p.bomberToC ?? null,
-      bomberMoveProgress: p.bomberMoveProgress ?? null,
-      bomberSpeedMult: p.bomberSpeedMult ?? null,
     })),
     phase: room.phase,
     gameType: room.gameType,
@@ -780,11 +811,7 @@ function sanitize(room) {
     // Reaction Tap
     reactionFired: room.reactionFired ?? false,
     reactionTimes: room.reactionTimes ?? {},
-    // Bomberman — always send the grid so late-mounting clients (AnimatePresence delay) never miss it
-    bomberGrid: room.bomberGrid ?? null,
-    bomberBombs: room.bomberBombs ?? [],
-    bomberExplosions: room.bomberExplosions ?? [],
-    bomberPowerups: room.bomberPowerups ?? [],
+    // Bomberman fields deliberately omitted — sent via dedicated bomber_grid / bomber_state events
     bomberGameOver: room.bomberGameOver ?? false,
   };
 }

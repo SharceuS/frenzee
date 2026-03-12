@@ -13,10 +13,25 @@ const BOMBER_BOMB_MS = 2000; // must match server BOMBER_BOMB_MS
 
 interface Props { room: Room; myId: string; }
 
+// ── Shape of the lightweight bomber_state event ───────────────────────────────
+interface BomberPlayer {
+    id: string;
+    fromR: number | null; fromC: number | null;
+    toR: number | null;   toC: number | null;
+    progress: number; speedMult: number; alive: boolean;
+}
+interface BomberState {
+    players: BomberPlayer[];
+    bombs: { r: number; c: number; timer: number; ownerId: string; range: number }[];
+    explosions: { tiles: { r: number; c: number }[]; centerR: number; centerC: number; expiresAt: number }[];
+    powerups: { r: number; c: number; type: "range" | "speed" }[];
+    gameOver: boolean;
+}
+
 // ── Tile-level collision (mirrors server bomberTileBlocked) ───────────────────
 function isTileBlocked(
     grid: number[][],
-    bombs: { r: number; c: number }[],
+    bombs: BomberState["bombs"],
     passBombKey: string | null,
     r: number, c: number
 ): boolean {
@@ -39,52 +54,63 @@ export default function BombermanScreen({ room, myId }: Props) {
     const { socket } = useSocket();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const roomRef = useRef(room);
+    const codeRef = useRef(room.code);
     const dirsRef = useRef<Set<string>>(new Set());
     const rafRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
-    const sendTsRef = useRef<number>(0);   // throttle socket sends to ~30 Hz
+    const sendTsRef = useRef<number>(0);
     const bombQueueRef = useRef(false);
-    const latencyRef = useRef<number>(0); // round-trip time in ms    
-    const localPassBombRef = useRef<string | null>(null); // bomb tile key player can still walk through
-    // Cached grid — only updated when server sends a new one (null means no change)
+    const latencyRef = useRef<number>(0);
+    const localPassBombRef = useRef<string | null>(null);
     const gridCacheRef = useRef<number[][] | null>(null);
-    // My predicted grid state (60fps); null until server gives us first position
+    const bomberStateRef = useRef<BomberState>({
+        players: [], bombs: [], explosions: [], powerups: [], gameOver: false,
+    });
     const localGridRef = useRef<{ fromR: number; fromC: number; toR: number; toC: number; progress: number } | null>(null);
 
-    // Keep roomRef up-to-date, cache grid when server sends it, reconcile prediction
+    // Keep code ref in sync
+    useEffect(() => { codeRef.current = room.code; }, [room.code]);
+
+    // ── Subscribe to dedicated lightweight Bomberman events ───────────────────
     useEffect(() => {
-        roomRef.current = room;
-        // Cache grid whenever server sends it (only sent on init + wall changes)
-        if (room.bomberGrid) {
-            gridCacheRef.current = room.bomberGrid;
-        }
-        const me = room.players.find(p => p.id === myId);
-        if (me?.bomberFromR != null && me.bomberToR != null) {
-            if (localGridRef.current === null) {
-                // First time: hard snap
-                localGridRef.current = {
-                    fromR: me.bomberFromR!, fromC: me.bomberFromC!,
-                    toR: me.bomberToR!, toC: me.bomberToC!,
-                    progress: me.bomberMoveProgress ?? 1.0,
-                };
-            } else {
-                const lg = localGridRef.current;
-                // If server tile trajectory differs: snap (means we went out of sync)
-                if (
-                    me.bomberFromR !== lg.fromR || me.bomberFromC !== lg.fromC ||
-                    me.bomberToR !== lg.toR || me.bomberToC !== lg.toC
-                ) {
+        if (!socket) return;
+
+        const onGrid = (grid: number[][]) => {
+            gridCacheRef.current = grid;
+        };
+
+        const onState = (state: BomberState) => {
+            bomberStateRef.current = state;
+            // Reconcile my player's grid prediction
+            const me = state.players.find(p => p.id === myId);
+            if (me && me.fromR != null && me.toR != null) {
+                if (localGridRef.current === null) {
                     localGridRef.current = {
-                        fromR: me.bomberFromR!, fromC: me.bomberFromC!,
-                        toR: me.bomberToR!, toC: me.bomberToC!,
-                        progress: me.bomberMoveProgress ?? 1.0,
+                        fromR: me.fromR, fromC: me.fromC!,
+                        toR: me.toR, toC: me.toC!,
+                        progress: me.progress,
                     };
+                } else {
+                    const lg = localGridRef.current;
+                    if (me.fromR !== lg.fromR || me.fromC !== lg.fromC ||
+                        me.toR !== lg.toR || me.toC !== lg.toC) {
+                        localGridRef.current = {
+                            fromR: me.fromR, fromC: me.fromC!,
+                            toR: me.toR, toC: me.toC!,
+                            progress: me.progress,
+                        };
+                    }
                 }
-                // Otherwise keep our client-predicted progress (smoother)
             }
-        }
-    }, [room, myId]);
+        };
+
+        socket.on("bomber_grid", onGrid);
+        socket.on("bomber_state", onState);
+        return () => {
+            socket.off("bomber_grid", onGrid);
+            socket.off("bomber_state", onState);
+        };
+    }, [socket, myId]);
 
     // ── Latency ping/pong ─────────────────────────────────────────────────
     useEffect(() => {
@@ -92,17 +118,17 @@ export default function BombermanScreen({ room, myId }: Props) {
         const ping = () => socket.emit("ping_bomber", { ts: Date.now() });
         const onPong = ({ ts }: { ts: number }) => { latencyRef.current = Date.now() - ts; };
         socket.on("pong_bomber", onPong);
-        ping(); // immediate first ping
+        ping();
         const iv = setInterval(ping, 1000);
         return () => { clearInterval(iv); socket.off("pong_bomber", onPong); };
     }, [socket]);
 
-    // ── Flush current input to server (called at ~30fps from RAF loop) ────────
+    // ── Flush current input to server ────────────────────────────────────────
     const flushInput = useCallback((bomb = false) => {
         const [ndr, ndc] = getDir(dirsRef.current);
-        socket?.emit("bomberman_input", { code: room.code, dx: ndc, dy: ndr, bomb });
+        socket?.emit("bomberman_input", { code: codeRef.current, dx: ndc, dy: ndr, bomb });
         bombQueueRef.current = false;
-    }, [socket, room.code]);
+    }, [socket]);
 
     // ── Keyboard ─────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -114,56 +140,49 @@ export default function BombermanScreen({ room, myId }: Props) {
             if (KEYS[e.code]) {
                 e.preventDefault();
                 dirsRef.current.add(KEYS[e.code]);
-                flushInput(); // send immediately so server reacts at once
+                flushInput();
             }
             if (e.code === "Space") { e.preventDefault(); bombQueueRef.current = true; flushInput(true); }
         };
         const up = (e: KeyboardEvent) => {
-            if (KEYS[e.code]) {
-                dirsRef.current.delete(KEYS[e.code]);
-                flushInput(); // ← send stop immediately so server doesn't skid
-            }
+            if (KEYS[e.code]) { dirsRef.current.delete(KEYS[e.code]); flushInput(); }
         };
         window.addEventListener("keydown", down);
         window.addEventListener("keyup", up);
         return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-    }, []);
+    }, [flushInput]);
 
-    // ── RAF game loop: predict at 60fps, send input at ~30fps ────────────────
+    // ── RAF game loop: predict at 60fps, send input at ~20fps ────────────────
     useEffect(() => {
         const loop = (ts: number) => {
             const dt = Math.min((ts - (lastTimeRef.current || ts)) / 1000, 0.05);
             lastTimeRef.current = ts;
 
-            const r = roomRef.current;
-            const grid = gridCacheRef.current ?? r.bomberGrid; // use cached grid
-            const me = r.players.find(p => p.id === myId);
-            const bombs = r.bomberBombs ?? [];
+            const grid = gridCacheRef.current;
+            const state = bomberStateRef.current;
+            const bombs = state.bombs;
+            const me = state.players.find(p => p.id === myId);
 
-            // Grid-based bomb grace-period tracking
+            // Bomb grace-period tracking
             if (localPassBombRef.current) {
                 const [pr, pc] = localPassBombRef.current.split(',').map(Number);
                 if (!bombs.some(b => b.r === pr && b.c === pc)) {
-                    localPassBombRef.current = null; // bomb exploded
+                    localPassBombRef.current = null;
                 } else if (localGridRef.current) {
-                    // Clear once player's SOURCE tile is no longer the bomb tile
                     const lg = localGridRef.current;
-                    if (lg.fromR !== pr || lg.fromC !== pc) {
-                        localPassBombRef.current = null;
-                    }
+                    if (lg.fromR !== pr || lg.fromC !== pc) localPassBombRef.current = null;
                 }
             }
-            // Detect new bomb placed on our current tile
             if (!localPassBombRef.current && localGridRef.current) {
                 const lg = localGridRef.current;
                 const mine = bombs.find(b => b.r === lg.toR && b.c === lg.toC && b.ownerId === myId);
                 if (mine) localPassBombRef.current = `${mine.r},${mine.c}`;
             }
 
-            // Grid-based client-side prediction (my player only)
-            if (grid && localGridRef.current && me?.bomberAlive !== false) {
+            // Client-side prediction (my player only)
+            if (grid && localGridRef.current && me?.alive !== false) {
                 const lg = localGridRef.current;
-                const speedMult = me?.bomberSpeedMult ?? 1;
+                const speedMult = me?.speedMult ?? 1;
                 const step = BOMBER_GRID_SPEED * speedMult * dt;
 
                 if (lg.progress < 1.0) {
@@ -171,41 +190,34 @@ export default function BombermanScreen({ room, myId }: Props) {
                     if (lg.progress >= 1.0) {
                         const overflow = lg.progress - 1.0;
                         lg.fromR = lg.toR; lg.fromC = lg.toC;
-                        // Clear pass key once we've left the bomb tile
                         if (localPassBombRef.current) {
                             const [pr, pc] = localPassBombRef.current.split(',').map(Number);
                             if (lg.fromR !== pr || lg.fromC !== pc) localPassBombRef.current = null;
                         }
                         const [ndr, ndc] = getDir(dirsRef.current);
-                        if (
-                            (ndr !== 0 || ndc !== 0) &&
-                            !isTileBlocked(grid, bombs, localPassBombRef.current, lg.fromR + ndr, lg.fromC + ndc)
-                        ) {
+                        if ((ndr !== 0 || ndc !== 0) &&
+                            !isTileBlocked(grid, bombs, localPassBombRef.current, lg.fromR + ndr, lg.fromC + ndc)) {
                             lg.toR = lg.fromR + ndr; lg.toC = lg.fromC + ndc;
                             lg.progress = Math.max(0, overflow);
                         } else {
-                            lg.toR = lg.fromR; lg.toC = lg.fromC;
-                            lg.progress = 1.0;
+                            lg.toR = lg.fromR; lg.toC = lg.fromC; lg.progress = 1.0;
                         }
                     }
                 } else {
                     const [ndr, ndc] = getDir(dirsRef.current);
-                    if (
-                        (ndr !== 0 || ndc !== 0) &&
-                        !isTileBlocked(grid, bombs, localPassBombRef.current, lg.fromR + ndr, lg.fromC + ndc)
-                    ) {
+                    if ((ndr !== 0 || ndc !== 0) &&
+                        !isTileBlocked(grid, bombs, localPassBombRef.current, lg.fromR + ndr, lg.fromC + ndc)) {
                         lg.toR = lg.fromR + ndr; lg.toC = lg.fromC + ndc;
-                        lg.progress = BOMBER_GRID_SPEED * (me?.bomberSpeedMult ?? 1) * dt;
+                        lg.progress = BOMBER_GRID_SPEED * (me?.speedMult ?? 1) * dt;
                     }
                 }
             }
 
-            // Send input to server at ~30fps
-            if (ts - sendTsRef.current >= 33) {
+            // Send input at ~20fps (matches server tick)
+            if (ts - sendTsRef.current >= 50) {
                 sendTsRef.current = ts;
                 const bomb = bombQueueRef.current;
-                const anyDir = dirsRef.current.size > 0;
-                if (anyDir || bomb) flushInput(bomb);
+                if (dirsRef.current.size > 0 || bomb) flushInput(bomb);
             }
 
             // Draw
@@ -218,7 +230,7 @@ export default function BombermanScreen({ room, myId }: Props) {
                 if (canvas.width !== W) canvas.width = W;
                 if (canvas.height !== H) canvas.height = H;
                 const ctx = canvas.getContext("2d");
-                if (ctx) drawBomberman(ctx, T, r, myId, localGridRef.current, latencyRef.current, gridCacheRef.current);
+                if (ctx) drawBomberman(ctx, T, state, myId, localGridRef.current, latencyRef.current, grid);
             }
 
             rafRef.current = requestAnimationFrame(loop);
@@ -239,9 +251,9 @@ export default function BombermanScreen({ room, myId }: Props) {
         onPointerCancel: () => { dirsRef.current.delete(dir); flushInput(); },
     });
 
-    const myPlayer = room.players.find(p => p.id === myId);
-    const isAlive = myPlayer?.bomberAlive !== false;
-    const gameOver = room.bomberGameOver;
+    const myBomberPlayer = bomberStateRef.current.players.find(p => p.id === myId);
+    const isAlive = myBomberPlayer?.alive !== false;
+    const gameOver = bomberStateRef.current.gameOver;
 
     return (
         <div className="page-fill gap-0" style={{ background: "#0a0a1a" }}>
@@ -249,15 +261,19 @@ export default function BombermanScreen({ room, myId }: Props) {
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-2">
                 <div className="round-pill">💥 Round {room.round}/{room.maxRounds}</div>
                 <div className="flex gap-3">
-                    {room.players.map((p, i) => (
-                        <div key={p.id} className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-full flex-shrink-0 transition-all"
-                                style={{ background: PLAYER_COLORS[i % 4], opacity: p.bomberAlive === false ? 0.25 : 1 }} />
-                            <span className="font-nunito text-xs" style={{ color: p.bomberAlive === false ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.7)" }}>
-                                {p.name}
-                            </span>
-                        </div>
-                    ))}
+                    {room.players.map((p, i) => {
+                        const bp = bomberStateRef.current.players.find(x => x.id === p.id);
+                        const alive = bp ? bp.alive : true;
+                        return (
+                            <div key={p.id} className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded-full flex-shrink-0 transition-all"
+                                    style={{ background: PLAYER_COLORS[i % 4], opacity: alive ? 1 : 0.25 }} />
+                                <span className="font-nunito text-xs" style={{ color: alive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }}>
+                                    {p.name}
+                                </span>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -339,15 +355,13 @@ export default function BombermanScreen({ room, myId }: Props) {
 function drawBomberman(
     ctx: CanvasRenderingContext2D,
     T: number,
-    room: Room,
+    state: BomberState,
     myId: string,
     localGrid: { fromR: number; fromC: number; toR: number; toC: number; progress: number } | null,
     latencyMs: number,
-    gridCache: number[][] | null
+    grid: number[][] | null
 ) {
-    // Use the cached grid (server only sends it when it changes)
-    const grid = gridCache ?? room.bomberGrid;
-    if (!grid) return; // grid not received yet
+    if (!grid) return;
     const now = Date.now();
 
     // Background (floor colour — visible in the 1-px gap around every wall tile)
@@ -400,7 +414,7 @@ function drawBomberman(
     }
 
     // Explosions
-    for (const exp of room.bomberExplosions ?? []) {
+    for (const exp of state.explosions) {
         const totalMs = 750;
         const remaining = Math.max(0, exp.expiresAt - now);
         const progress = 1 - remaining / totalMs; // 0=just exploded, 1=about to vanish
@@ -425,7 +439,7 @@ function drawBomberman(
     }
 
     // Bombs
-    for (const bomb of room.bomberBombs ?? []) {
+    for (const bomb of state.bombs) {
         const cx = (bomb.c + 0.5) * T;
         const cy = (bomb.r + 0.5) * T;
         // progress: 0=just placed, 1=about to explode
@@ -476,7 +490,7 @@ function drawBomberman(
     }
 
     // Power-ups
-    for (const pu of room.bomberPowerups ?? []) {
+    for (const pu of state.powerups) {
         const px = (pu.c + 0.5) * T;
         const py = (pu.r + 0.5) * T;
         const r2 = T * 0.28;
@@ -507,38 +521,33 @@ function drawBomberman(
     }
 
     // Players — use client-predicted pos for myId, server pos for everyone else
-    room.players.forEach((p, i) => {
-        if (p.bomberAlive === false) return;
+    state.players.forEach((p, i) => {
+        if (!p.alive) return;
 
         const isMe = p.id === myId;
         let px: number, py: number;
 
         if (isMe) {
-            // Use client-predicted grid lerp; fall back to server fields
             if (localGrid) {
                 const t = Math.min(localGrid.progress, 1.0);
                 px = (localGrid.fromC + (localGrid.toC - localGrid.fromC) * t + 0.5) * T;
                 py = (localGrid.fromR + (localGrid.toR - localGrid.fromR) * t + 0.5) * T;
-            } else if (p.bomberFromR != null && p.bomberToR != null) {
-                const t = Math.min(p.bomberMoveProgress ?? 1.0, 1.0);
-                px = (p.bomberFromC! + (p.bomberToC! - p.bomberFromC!) * t + 0.5) * T;
-                py = (p.bomberFromR! + (p.bomberToR! - p.bomberFromR!) * t + 0.5) * T;
-            } else if (p.bomberX != null) {
-                px = p.bomberX * T; py = p.bomberY! * T;
+            } else if (p.fromR != null && p.toR != null) {
+                const t = Math.min(p.progress, 1.0);
+                px = (p.fromC! + (p.toC! - p.fromC!) * t + 0.5) * T;
+                py = (p.fromR + (p.toR - p.fromR) * t + 0.5) * T;
             } else { return; }
         } else {
-            // Other players: interpolate from server grid fields
-            if (p.bomberFromR != null && p.bomberToR != null) {
-                const t = Math.min(p.bomberMoveProgress ?? 1.0, 1.0);
-                px = (p.bomberFromC! + (p.bomberToC! - p.bomberFromC!) * t + 0.5) * T;
-                py = (p.bomberFromR! + (p.bomberToR! - p.bomberFromR!) * t + 0.5) * T;
-            } else if (p.bomberX != null) {
-                px = p.bomberX * T; py = p.bomberY! * T;
+            if (p.fromR != null && p.toR != null) {
+                const t = Math.min(p.progress, 1.0);
+                px = (p.fromC! + (p.toC! - p.fromC!) * t + 0.5) * T;
+                py = (p.fromR + (p.toR - p.fromR) * t + 0.5) * T;
             } else { return; }
         }
 
         const R = T * 0.4;
         const col = PLAYER_COLORS[i % 4];
+        const initial = p.id[0].toUpperCase(); // fallback to socket-id initial
 
         // Shadow
         ctx.beginPath();
@@ -552,18 +561,15 @@ function drawBomberman(
         pg.addColorStop(1, col + "77");
         ctx.fillStyle = pg; ctx.fill();
 
-        // Outline — thicker for "me"
         ctx.strokeStyle = isMe ? "white" : "rgba(255,255,255,0.5)";
         ctx.lineWidth = isMe ? 2.5 : 1.5; ctx.stroke();
 
-        // Initial
         ctx.font = `bold ${Math.floor(R * 1.15)}px sans-serif`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 3;
-        ctx.strokeText(p.name[0].toUpperCase(), px, py + 0.5);
-        ctx.fillStyle = "white"; ctx.fillText(p.name[0].toUpperCase(), px, py + 0.5);
+        ctx.strokeText(initial, px, py + 0.5);
+        ctx.fillStyle = "white"; ctx.fillText(initial, px, py + 0.5);
 
-        // "YOU" marker
         if (isMe) {
             ctx.font = `bold ${Math.floor(R * 0.6)}px sans-serif`;
             ctx.fillStyle = "rgba(255,255,255,0.85)";
