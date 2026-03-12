@@ -2,13 +2,12 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Room } from "@/lib/types";
-import { useSocket } from "@/lib/socket";
+import { apiReactionTap } from "@/lib/api";
 import { sfxTap, sfxError, sfxWin, sfxRoundStart } from "@/lib/sounds";
 
 interface Props { room: Room; myId: string; }
 
 export default function ReactionTapScreen({ room, myId }: Props) {
-    const { socket } = useSocket();
     const [tapped, setTapped] = useState(false);
     const [myTime, setMyTime] = useState<number | null>(null);
     const [earlyTap, setEarlyTap] = useState(false);
@@ -48,7 +47,7 @@ export default function ReactionTapScreen({ room, myId }: Props) {
         setMyTime(localTime);
         setTapped(true);
         // Send the client-measured time so server stores it directly (avoids network latency skew)
-        socket?.emit("reaction_tap", { code: room.code, clientMs: localTime });
+        apiReactionTap(room.code, myId, localTime);
     };
 
     const getRankEmoji = (ms: number) => {

@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { useSocket } from "@/lib/socket";
+import { useSse } from "@/lib/sse";
+import {
+  apiCreateRoom, apiJoinRoom, apiSelectGame, apiStartGame,
+  apiSubmitAnswer, apiSubmitVote, apiSubmitMatchGuesses,
+  apiNextRound, apiPlayAgain,
+} from "@/lib/api";
 import { Room, Phase } from "@/lib/types";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -29,7 +34,7 @@ const variants = {
 };
 
 export default function GameApp() {
-    const { socket } = useSocket();
+    const { on, off, connect, disconnect } = useSse();
     const [myId, setMyId] = useState("");
     const [room, setRoom] = useState<Room | null>(null);
     const [myRole, setMyRole] = useState<"liar" | "truth_teller" | null>(null);
@@ -39,69 +44,97 @@ export default function GameApp() {
     const phase: Phase = room?.phase ?? "home";
     const isHost = room?.host === myId;
 
+    // ── SSE event subscriptions ───────────────────────────────────────────────
     useEffect(() => {
-        if (!socket) return;
-        const onConnect = () => setMyId(socket.id ?? "");
         const onRoom = (r: Room) => setRoom(r);
         const onRole = ({ role }: { role: "liar" | "truth_teller" }) => setMyRole(role);
         const onDebate = (d: { position: string; side: "for" | "against" }) => setMyDebateRole(d);
         const onError = (msg: string) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(""), 3000); };
 
-        socket.on("connect", onConnect);
-        socket.on("room_update", onRoom);
-        socket.on("your_role", onRole);
-        socket.on("your_debate_role", onDebate);
-        socket.on("error_msg", onError);
+        on("room_update", onRoom);
+        on("your_role", onRole);
+        on("your_debate_role", onDebate);
+        on("error_msg", onError);
         return () => {
-            socket.off("connect", onConnect);
-            socket.off("room_update", onRoom);
-            socket.off("your_role", onRole);
-            socket.off("your_debate_role", onDebate);
-            socket.off("error_msg", onError);
+            off("room_update", onRoom);
+            off("your_role", onRole);
+            off("your_debate_role", onDebate);
+            off("error_msg", onError);
         };
-    }, [socket]);
+    }, [on, off]);
 
-    // ── Actions ──────────────────────────────────────
-    const createRoom = useCallback((name: string, avatar: import("@/lib/types").AvatarConfig) => {
-        socket?.emit("create_room", { name, avatar }, (res: { ok: boolean; room: Room }) => {
-            if (res.ok) { setRoom(res.room); setMyId(socket.id ?? ""); }
-        });
-    }, [socket]);
+    // ── Actions ───────────────────────────────────────────────────────────────
+    const createRoom = useCallback(async (name: string, avatar: import("@/lib/types").AvatarConfig) => {
+        // Optimistic: immediately show lobby with a placeholder room so the UI responds instantly
+        const tempId = crypto.randomUUID();
+        setMyId(tempId);
+        setRoom({
+            code: "····", host: tempId,
+            players: [{ id: tempId, name, avatar, score: 0, isHost: true }],
+            phase: "lobby", gameType: null, round: 0, maxRounds: 5,
+            currentQuestion: null, questionData: null, spotlightId: null, debaterIds: [],
+            liarId: null, answers: null, votes: null, matchGuesses: {}, answerCount: 0, voteCount: 0,
+            roundResult: null, triviaStartTime: null, drawItDrawerId: null, drawItGuessedIds: [],
+            wordBombActiveId: null, wordBombPattern: null, wordBombLives: {}, wordBombMinFuse: 8,
+            wordBombUsedWords: [], reactionFired: false, reactionTimes: {},
+            bomberGrid: null, bomberBombs: [], bomberExplosions: [], bomberPowerups: [], bomberGameOver: false,
+        } as Room);
 
-    const joinRoom = useCallback((code: string, name: string, avatar: import("@/lib/types").AvatarConfig) => {
-        socket?.emit("join_room", { code, name, avatar }, (res: { ok: boolean; room?: Room; error?: string }) => {
-            if (res.ok && res.room) { setRoom(res.room); setMyId(socket?.id ?? ""); }
-            else setErrorMsg(res.error ?? "Failed to join");
-        });
-    }, [socket]);
+        const res = await apiCreateRoom(name, avatar);
+        if (res.ok) {
+            setMyId(res.playerId);
+            setRoom(res.room);
+            localStorage.setItem("frenzee_session", JSON.stringify({ code: res.code, playerId: res.playerId }));
+            connect(res.code, res.playerId);
+        } else {
+            // Optimistic rollback
+            setRoom(null);
+            setMyId("");
+            setErrorMsg(res.error ?? "Failed to create room");
+            setTimeout(() => setErrorMsg(""), 3000);
+        }
+    }, [connect]);
+
+    const joinRoom = useCallback(async (code: string, name: string, avatar: import("@/lib/types").AvatarConfig) => {
+        const res = await apiJoinRoom(code, name, avatar);
+        if (res.ok && res.room && res.playerId) {
+            setMyId(res.playerId);
+            setRoom(res.room);
+            localStorage.setItem("frenzee_session", JSON.stringify({ code: res.room.code, playerId: res.playerId }));
+            connect(res.room.code, res.playerId);
+        } else {
+            setErrorMsg(res.error ?? "Failed to join");
+            setTimeout(() => setErrorMsg(""), 3000);
+        }
+    }, [connect]);
 
     const selectGame = useCallback((gameType: string) => {
-        if (room) socket?.emit("select_game", { code: room.code, gameType });
-    }, [socket, room]);
+        if (room) apiSelectGame(room.code, myId, gameType);
+    }, [room, myId]);
 
     const startGame = useCallback((maxRounds: number) => {
-        if (room) socket?.emit("start_game", { code: room.code, maxRounds });
-    }, [socket, room]);
+        if (room) apiStartGame(room.code, myId, maxRounds);
+    }, [room, myId]);
 
     const submitAnswer = useCallback((answer: unknown) => {
-        if (room) socket?.emit("submit_answer", { code: room.code, answer });
-    }, [socket, room]);
+        if (room) apiSubmitAnswer(room.code, myId, answer);
+    }, [room, myId]);
 
     const submitVote = useCallback((targetId: string) => {
-        if (room) socket?.emit("submit_vote", { code: room.code, targetId });
-    }, [socket, room]);
+        if (room) apiSubmitVote(room.code, myId, targetId);
+    }, [room, myId]);
 
     const submitMatchGuesses = useCallback((guesses: Record<string, string>) => {
-        if (room) socket?.emit("submit_match_guesses", { code: room.code, guesses });
-    }, [socket, room]);
+        if (room) apiSubmitMatchGuesses(room.code, myId, guesses);
+    }, [room, myId]);
 
     const nextRound = useCallback(() => {
-        if (room) { setMyRole(null); setMyDebateRole(null); socket?.emit("next_round", { code: room.code }); }
-    }, [socket, room]);
+        if (room) { setMyRole(null); setMyDebateRole(null); apiNextRound(room.code, myId); }
+    }, [room, myId]);
 
     const playAgain = useCallback(() => {
-        if (room) { setMyRole(null); setMyDebateRole(null); socket?.emit("play_again", { code: room.code }); }
-    }, [socket, room]);
+        if (room) { setMyRole(null); setMyDebateRole(null); apiPlayAgain(room.code, myId); }
+    }, [room, myId]);
 
     // ── Screen router ────────────────────────────────
     // Lobby key must NOT include gameType — selecting a game would remount the whole screen & reset tab state

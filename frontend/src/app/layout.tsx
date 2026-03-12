@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { SseProvider } from "@/lib/sse";
 
 export const metadata: Metadata = {
     title: "Frenzee 🎉",
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <div className="blob blob-pink" />
                     <div className="blob blob-blue" />
                 </div>
-                {children}
+                <SseProvider>{children}</SseProvider>
             </body>
         </html>
     );

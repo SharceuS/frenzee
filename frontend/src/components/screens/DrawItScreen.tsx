@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Room } from "@/lib/types";
-import { useSocket } from "@/lib/socket";
+import { useSse } from "@/lib/sse";
+import { apiDrawStroke, apiDrawClear, apiDrawRequestWord, apiDrawGuess } from "@/lib/api";
 import { sfxSubmit, sfxWin, sfxRoundStart } from "@/lib/sounds";
 
 interface Props { room: Room; myId: string; }
@@ -15,7 +16,7 @@ const PALETTE = ["#FFFFFF", "#EF4444", "#F97316", "#EAB308", "#22C55E",
 const SIZES = [3, 6, 12, 20];
 
 export default function DrawItScreen({ room, myId }: Props) {
-    const { socket } = useSocket();
+    const { on, off } = useSse();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const isDrawing = useRef(false);
     const lastPos = useRef<{ x: number; y: number } | null>(null);
@@ -38,45 +39,14 @@ export default function DrawItScreen({ room, myId }: Props) {
         setTimeout(() => { chatRef.current?.scrollTo({ top: 99999, behavior: "smooth" }); }, 50);
     };
 
-    // Listen for server events
-    useEffect(() => {
-        if (!socket) return;
-        const onWord = ({ word }: { word: string }) => { setMyWord(word); sfxRoundStart(); }; // eslint-disable-line @typescript-eslint/no-unused-vars
-        const onStroke = (stroke: Stroke) => drawStroke(stroke);
-        const onClear = () => clearCanvas();
-        const onCorrect = ({ guesserName, pts }: { guesserName: string; pts: number }) => {
-            sfxWin(); addChat({ type: "correct", name: guesserName, text: "guessed it! 🎉", pts });
-            if (guesserName === room.players.find((p) => p.id === myId)?.name) setGuessed(true);
-        };
-        const onWrong = ({ guesserName, word }: { guesserName: string; word: string }) => {
-            addChat({ type: "wrong", name: guesserName, text: word });
-        };
-        socket.on("draw_your_word", onWord);
-        socket.on("draw_stroke", onStroke);
-        socket.on("draw_clear", onClear);
-        socket.on("draw_guess_correct", onCorrect);
-        socket.on("draw_guess_wrong", onWrong);
-        return () => {
-            socket.off("draw_your_word", onWord);
-            socket.off("draw_stroke", onStroke);
-            socket.off("draw_clear", onClear);
-            socket.off("draw_guess_correct", onCorrect);
-            socket.off("draw_guess_wrong", onWrong);
-        };
-    }, [socket, myId, room.players]);
-
     // If we're the drawer and haven't received our word yet, request it from the server.
-    // This covers the race condition where draw_your_word fires before this component mounts.
     useEffect(() => {
-        if (!socket || !isDrawer) return;
-        // Request immediately, then retry after 600ms in case first request races with mount
-        socket.emit("draw_request_word", { code: room.code });
-        const retry = setTimeout(() => {
-            socket.emit("draw_request_word", { code: room.code });
-        }, 600);
+        if (!isDrawer) return;
+        apiDrawRequestWord(room.code, myId);
+        const retry = setTimeout(() => apiDrawRequestWord(room.code, myId), 600);
         return () => clearTimeout(retry);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [socket, isDrawer]);
+    }, [isDrawer]);
 
     // Canvas helpers
     const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
@@ -103,6 +73,33 @@ export default function DrawItScreen({ room, myId }: Props) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }, []);
 
+    // Listen for server events via SSE (placed after drawStroke/clearCanvas declarations)
+    useEffect(() => {
+        const onWord = ({ word }: { word: string }) => { setMyWord(word); sfxRoundStart(); };
+        const onStroke = (stroke: Stroke) => drawStroke(stroke);
+        const onClear = () => clearCanvas();
+        const onCorrect = ({ guesserName, pts }: { guesserName: string; pts: number }) => {
+            sfxWin(); addChat({ type: "correct", name: guesserName, text: "guessed it! 🎉", pts });
+            if (guesserName === room.players.find((p) => p.id === myId)?.name) setGuessed(true);
+        };
+        const onWrong = ({ guesserName, word }: { guesserName: string; word: string }) => {
+            addChat({ type: "wrong", name: guesserName, text: word });
+        };
+        on("draw_your_word", onWord);
+        on("draw_stroke", onStroke);
+        on("draw_clear", onClear);
+        on("draw_guess_correct", onCorrect);
+        on("draw_guess_wrong", onWrong);
+        return () => {
+            off("draw_your_word", onWord);
+            off("draw_stroke", onStroke);
+            off("draw_clear", onClear);
+            off("draw_guess_correct", onCorrect);
+            off("draw_guess_wrong", onWrong);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [on, off, myId, room.players]);
+
     const getPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
         const rect = canvasRef.current!.getBoundingClientRect();
         return {
@@ -123,7 +120,7 @@ export default function DrawItScreen({ room, myId }: Props) {
         const pos = getPos(e);
         const stroke: Stroke = { x1: lastPos.current.x, y1: lastPos.current.y, x2: pos.x, y2: pos.y, color, width: size };
         drawStroke(stroke);
-        socket?.emit("draw_stroke", { code: room.code, stroke });
+        apiDrawStroke(room.code, myId, stroke);
         lastPos.current = pos;
     };
 
@@ -131,14 +128,14 @@ export default function DrawItScreen({ room, myId }: Props) {
 
     const handleClear = () => {
         clearCanvas();
-        socket?.emit("draw_clear", { code: room.code });
+        apiDrawClear(room.code, myId);
     };
 
     const handleGuess = () => {
         const g = guess.trim();
         if (!g || guessed || myHasGuessed) return;
         sfxSubmit();
-        socket?.emit("draw_guess", { code: room.code, word: g });
+        apiDrawGuess(room.code, myId, g);
         setGuess("");
     };
 

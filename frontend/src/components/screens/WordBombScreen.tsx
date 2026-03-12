@@ -2,13 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Room } from "@/lib/types";
-import { useSocket } from "@/lib/socket";
+import { useSse } from "@/lib/sse";
+import { apiWordBombSubmit } from "@/lib/api";
 import { sfxTap, sfxSubmit, sfxError } from "@/lib/sounds";
 
 interface Props { room: Room; myId: string; }
 
 export default function WordBombScreen({ room, myId }: Props) {
-    const { socket } = useSocket();
+    const { on, off } = useSse();
     const [word, setWord] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
     const [bombShake, setBombShake] = useState(false);
@@ -28,9 +29,8 @@ export default function WordBombScreen({ room, myId }: Props) {
         if (isMyTurn) { inputRef.current?.focus(); sfxTap(); }
     }, [isMyTurn, activeId]);
 
-    // Listen for bomb events
+    // Listen for bomb events via SSE
     useEffect(() => {
-        if (!socket) return;
         const onExplode = ({ playerId }: { playerId: string }) => {
             const name = room.players.find((p) => p.id === playerId)?.name ?? "?";
             setLastExploded(name);
@@ -42,25 +42,25 @@ export default function WordBombScreen({ room, myId }: Props) {
             setNewPattern(p);
             setTimeout(() => setNewPattern(null), 1500);
         };
-        const onInvalid = ({ reason }: { reason: string }) => {
-            setErrorMsg(reason); sfxError();
-            setTimeout(() => setErrorMsg(""), 2000);
-        };
-        socket.on("bomb_exploded", onExplode);
-        socket.on("word_bomb_new_pattern", onNewPattern);
-        socket.on("word_bomb_invalid", onInvalid);
+        on("bomb_exploded", onExplode);
+        on("word_bomb_new_pattern", onNewPattern);
         return () => {
-            socket.off("bomb_exploded", onExplode);
-            socket.off("word_bomb_new_pattern", onNewPattern);
-            socket.off("word_bomb_invalid", onInvalid);
+            off("bomb_exploded", onExplode);
+            off("word_bomb_new_pattern", onNewPattern);
         };
-    }, [socket, room.players]);
+    }, [on, off, room.players]);
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!word.trim() || !isMyTurn) return;
         sfxSubmit();
-        socket?.emit("word_bomb_submit", { code: room.code, word: word.trim() });
+        const w = word.trim();
         setWord("");
+        const res = await apiWordBombSubmit(room.code, myId, w);
+        if (!res.ok && res.reason) {
+            sfxError();
+            setErrorMsg(res.reason);
+            setTimeout(() => setErrorMsg(""), 2000);
+        }
     };
 
     // Bomb tick speed based on fuse (faster = more ticking)

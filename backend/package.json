@@ -1,16 +1,14 @@
 {
-  "name": "pocket-party-backend",
-  "version": "1.0.0",
-  "main": "server.js",
+  "name": "frenzee-backend",
+  "version": "2.0.0",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.6.1",
-    "cors": "^2.8.5",
-    "uuid": "^9.0.0"
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

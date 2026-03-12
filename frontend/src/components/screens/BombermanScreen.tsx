@@ -2,7 +2,8 @@
 import { useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Room } from "@/lib/types";
-import { useSocket } from "@/lib/socket";
+import { useSse } from "@/lib/sse";
+import { apiBombermanInput, apiBombermanPing } from "@/lib/api";
 
 // ── Constants (must mirror server) ───────────────────────────────────────────
 const BOMBER_COLS = 15;
@@ -51,7 +52,7 @@ function getDir(dirs: Set<string>): [number, number] {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function BombermanScreen({ room, myId }: Props) {
-    const { socket } = useSocket();
+    const { on, off } = useSse();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const codeRef = useRef(room.code);
@@ -73,8 +74,6 @@ export default function BombermanScreen({ room, myId }: Props) {
 
     // ── Subscribe to dedicated lightweight Bomberman events ───────────────────
     useEffect(() => {
-        if (!socket) return;
-
         const onGrid = (grid: number[][]) => {
             gridCacheRef.current = grid;
         };
@@ -104,31 +103,33 @@ export default function BombermanScreen({ room, myId }: Props) {
             }
         };
 
-        socket.on("bomber_grid", onGrid);
-        socket.on("bomber_state", onState);
+        on("bomber_grid", onGrid);
+        on("bomber_state", onState);
         return () => {
-            socket.off("bomber_grid", onGrid);
-            socket.off("bomber_state", onState);
+            off("bomber_grid", onGrid);
+            off("bomber_state", onState);
         };
-    }, [socket, myId]);
+    }, [on, off, myId]);
 
-    // ── Latency ping/pong ─────────────────────────────────────────────────
+    // ── Latency ping via HTTP ─────────────────────────────────────────────
     useEffect(() => {
-        if (!socket) return;
-        const ping = () => socket.emit("ping_bomber", { ts: Date.now() });
-        const onPong = ({ ts }: { ts: number }) => { latencyRef.current = Date.now() - ts; };
-        socket.on("pong_bomber", onPong);
+        const ping = async () => {
+            const t0 = Date.now();
+            const res = await apiBombermanPing(room.code, t0).catch(() => null);
+            if (res) latencyRef.current = Date.now() - t0;
+        };
         ping();
         const iv = setInterval(ping, 1000);
-        return () => { clearInterval(iv); socket.off("pong_bomber", onPong); };
-    }, [socket]);
+        return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ── Flush current input to server ────────────────────────────────────────
     const flushInput = useCallback((bomb = false) => {
         const [ndr, ndc] = getDir(dirsRef.current);
-        socket?.emit("bomberman_input", { code: codeRef.current, dx: ndc, dy: ndr, bomb });
+        apiBombermanInput(codeRef.current, myId, ndc, ndr, bomb);
         bombQueueRef.current = false;
-    }, [socket]);
+    }, [myId]);
 
     // ── Keyboard ─────────────────────────────────────────────────────────────
     useEffect(() => {
