@@ -60,6 +60,7 @@ export default function GameApp() {
     const [mySpyfallRole, setMySpyfallRole] = useState<SpyfallRole | null>(null);
     const [errorMsg, setErrorMsg] = useState("");
     const [playerLeftMsg, setPlayerLeftMsg] = useState("");
+    const [isConnectingRoom, setIsConnectingRoom] = useState(false);
     const prevPlayersRef = useRef<Map<string, string>>(new Map());
 
     const phase: Phase = room?.phase ?? "home";
@@ -68,41 +69,41 @@ export default function GameApp() {
     // ── SSE event subscriptions ───────────────────────────────────────────────
     useEffect(() => {
         const onRoom = (r: Room) => setRoom(r);
+        const onPlayerLeft = ({ id, name }: { id: string; name: string }) => {
+            if (id === myId) return;
+            setPlayerLeftMsg(`${name} left the game`);
+            setTimeout(() => setPlayerLeftMsg(""), 3000);
+        };
         const onRole = ({ role }: { role: "liar" | "truth_teller" }) => setMyRole(role);
         const onDebate = (d: { position: string; side: "for" | "against" }) => setMyDebateRole(d);
         const onSpyfallRole = (d: SpyfallRole) => setMySpyfallRole(d);
         const onError = (msg: string) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(""), 3000); };
 
         on("room_update", onRoom);
+        on("player_left", onPlayerLeft);
         on("your_role", onRole);
         on("your_debate_role", onDebate);
         on("your_spyfall_role", onSpyfallRole);
         on("error_msg", onError);
         return () => {
             off("room_update", onRoom);
+            off("player_left", onPlayerLeft);
             off("your_role", onRole);
             off("your_debate_role", onDebate);
             off("your_spyfall_role", onSpyfallRole);
             off("error_msg", onError);
         };
-    }, [on, off]);
+    }, [on, off, myId]);
 
-    // ── Player-left detection (FE-CS-02) ─────────────────────────────────────
+    // ── Track current roster for future room transitions only ─────────────────
     useEffect(() => {
         if (!room) { prevPlayersRef.current = new Map(); return; }
-        const currMap = new Map(room.players.map(p => [p.id, p.name]));
-        const prevMap = prevPlayersRef.current;
-        if (prevMap.size > 0) {
-            for (const [id, name] of Array.from(prevMap.entries())) {
-                if (!currMap.has(id)) {
-                    setPlayerLeftMsg(`${name} left the game`);
-                    setTimeout(() => setPlayerLeftMsg(""), 3000);
-                    break;
-                }
-            }
-        }
-        prevPlayersRef.current = currMap;
+        prevPlayersRef.current = new Map(room.players.map(p => [p.id, p.name]));
     }, [room?.players]);
+
+    useEffect(() => {
+        if (connected) setIsConnectingRoom(false);
+    }, [connected]);
 
     // ── Game cancel when not enough players (FE-CS-03) ────────────────────────
     useEffect(() => {
@@ -149,6 +150,8 @@ export default function GameApp() {
     const createRoom = useCallback(async (name: string, avatar: import("@/lib/types").AvatarConfig) => {
         // Optimistic: immediately show lobby with a placeholder room so the UI responds instantly
         const tempId = crypto.randomUUID();
+        setIsConnectingRoom(true);
+        prevPlayersRef.current = new Map();
         setMyId(tempId);
         setRoom({
             code: "····", host: tempId,
@@ -170,10 +173,12 @@ export default function GameApp() {
         if (res.ok) {
             setMyId(res.playerId);
             setRoom(res.room);
+            prevPlayersRef.current = new Map(res.room.players.map(p => [p.id, p.name]));
             localStorage.setItem("frenzee_session", JSON.stringify({ code: res.code, playerId: res.playerId }));
             connect(res.code, res.playerId);
         } else {
             // Optimistic rollback
+            setIsConnectingRoom(false);
             setRoom(null);
             setMyId("");
             setErrorMsg(res.error ?? "Failed to create room");
@@ -182,13 +187,17 @@ export default function GameApp() {
     }, [connect]);
 
     const joinRoom = useCallback(async (code: string, name: string, avatar: import("@/lib/types").AvatarConfig) => {
+        setIsConnectingRoom(true);
+        prevPlayersRef.current = new Map();
         const res = await apiJoinRoom(code, name, avatar);
         if (res.ok && res.room && res.playerId) {
             setMyId(res.playerId);
             setRoom(res.room);
+            prevPlayersRef.current = new Map(res.room.players.map(p => [p.id, p.name]));
             localStorage.setItem("frenzee_session", JSON.stringify({ code: res.room.code, playerId: res.playerId }));
             connect(res.room.code, res.playerId);
         } else {
+            setIsConnectingRoom(false);
             setErrorMsg(res.error ?? "Failed to join");
             setTimeout(() => setErrorMsg(""), 3000);
         }
@@ -251,7 +260,7 @@ export default function GameApp() {
             </AnimatePresence>
 
             {/* Disconnected overlay (FE-CS-01) */}
-            {!connected && phase !== "home" && phase !== "disbanded" && (
+            {!connected && !isConnectingRoom && phase !== "home" && phase !== "disbanded" && room?.code !== "····" && (
                 <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4"
                     style={{ background: "rgba(8,4,20,0.92)", backdropFilter: "blur(12px)" }}>
                     <div className="text-5xl">📡</div>

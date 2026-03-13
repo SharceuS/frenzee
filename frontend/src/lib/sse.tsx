@@ -9,6 +9,7 @@ import { BACKEND } from "./api";
 // All named SSE events the server can emit
 const SSE_EVENTS = [
   "room_update",
+  "player_left",
   "your_role",
   "your_debate_role",
   "draw_your_word",

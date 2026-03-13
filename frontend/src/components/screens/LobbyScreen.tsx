@@ -249,7 +249,7 @@ const ALL_GAMES = [
     },
     {
         id: "spyfall", emoji: "🕶️", title: "Spyfall", desc: "Who's the spy?",
-        color: "#059669", cat: "social", soon: true,
+        color: "#059669", cat: "social",
         rules: [
             "Everyone gets a secret location card — except one player who gets SPY.",
             "Players ask each other questions to figure out who doesn't know the location.",
