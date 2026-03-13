@@ -18,7 +18,7 @@ interface Props { room: Room; myId: string; }
 // ── Tile-level collision (mirrors server bomberTileBlocked) ───────────────────
 function isTileBlocked(
     grid: number[][],
-    bombs: BomberState["bombs"],
+    bombs: BomberRealtimeState["bombs"],
     passBombKey: string | null,
     r: number, c: number
 ): boolean {
