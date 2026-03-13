@@ -114,3 +114,19 @@ export async function apiSpyfallAccuse(code: string, playerId: string) {
 export async function apiSpyfallGuess(code: string, playerId: string, guess: string) {
   return post<{ ok: boolean; error?: string }>(`/rooms/${code}/spyfall/guess`, { playerId, guess });
 }
+// ── Mafia ───────────────────────────────────────────
+export async function apiMafiaNightKill(code: string, playerId: string, targetId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/night-kill`, { playerId, targetId });
+}
+
+export async function apiMafiaDoctorSave(code: string, playerId: string, targetId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/doctor-save`, { playerId, targetId });
+}
+
+export async function apiMafiaDetectiveCheck(code: string, playerId: string, targetId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/detective-check`, { playerId, targetId });
+}
+
+export async function apiMafiaDayStart(code: string, playerId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/day-start`, { playerId });
+}

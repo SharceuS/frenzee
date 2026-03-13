@@ -33,7 +33,8 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
             gt === "roast_room" ||
             gt === "debate_pit" ||
             gt === "most_likely_to" ||
-            (gt === "spyfall" && rr.outcome === "spy_caught_failed");
+            (gt === "spyfall" && rr.outcome === "spy_caught_failed") ||
+            (gt === "mafia" && rr.winner === "town");
         if (shouldCelebrate) { fireConfetti(); sfxWin(); }
     }, [gt, rr]);
 
@@ -133,8 +134,17 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         const emojis: Record<string, string> = { finish_the_sentence: "✏️", confessions: "🤫", whose_line: "💬", emoji_story: "📖", unhinged_advice: "🤪" };
         headline = w.length > 0 ? w.map(id => getName(id)).join(" & ") + " got the most votes!" : "Everyone tied!";
         headlineEmoji = emojis[gt] ?? "✨"; headlineColor = "border-purple-500/40";
-    } else if (gt === "spyfall") {
-        const outcome = rr.outcome as string;
+    } else if (gt === "mafia") {
+        const winner = rr.winner as "town" | "mafia";
+        headline = winner === "town"
+            ? "Town wins! All Mafia eliminated! 🎉"
+            : "Mafia wins! They took over the town! 😈";
+        headlineEmoji = winner === "town" ? "🏘️" : "😈";
+        headlineColor = winner === "town" ? "border-green-500/40" : "border-red-500/40";
+        headlineGlow = winner === "town"
+            ? "shadow-[0_0_36px_rgba(16,185,129,0.28)]"
+            : "shadow-[0_0_36px_rgba(239,68,68,0.28)]";
+    } else if (gt === "spyfall") {        const outcome = rr.outcome as string;
         const spyName = getName(rr.spyId as string);
         if (outcome === "spy_escaped") {
             headline = `${spyName} escaped undetected! 😈`;
@@ -629,6 +639,97 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                                                 </motion.div>
                                             );
                                         })}
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    );
+                })()}
+
+                {/* MAFIA details */}
+                {gt === "mafia" && (() => {
+                    const mafiaWinner = rr.winner as "town" | "mafia";
+                    const roles = rr.roles as Record<string, string> ?? {};
+                    const survivors = rr.survivors as string[] ?? [];
+                    const eliminated = rr.eliminated as string[] ?? [];
+                    const pointDeltas = rr.pointDeltas as Record<string, number> ?? {};
+                    const ROLE_EMOJI: Record<string, string> = { mafia: "🔪", doctor: "💉", detective: "🔍", villager: "🏘️" };
+                    const ROLE_COLOR: Record<string, string> = { mafia: "#F87171", doctor: "#34D399", detective: "#60A5FA", villager: "#A1A1AA" };
+                    return (
+                        <>
+                            {/* Role reveal */}
+                            <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">🎭 Roles revealed</p>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {room.players.map((p, i) => {
+                                    const role = roles[p.id] ?? "villager";
+                                    const alive = survivors.includes(p.id);
+                                    return (
+                                        <motion.div key={p.id}
+                                            initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }}
+                                            className="answer-card flex items-center gap-2"
+                                            style={{
+                                                padding: "10px 12px", minHeight: 0,
+                                                borderColor: `${ROLE_COLOR[role]}44`,
+                                                opacity: alive ? 1 : 0.5,
+                                            }}
+                                        >
+                                            <span className="text-base">{ROLE_EMOJI[role]}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-fredoka text-white text-sm truncate">{p.name}</p>
+                                                <p className="font-nunito text-xs truncate" style={{ color: ROLE_COLOR[role] }}>{role}</p>
+                                            </div>
+                                            {!alive && <span className="text-xs">💀</span>}
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Survivors */}
+                            {survivors.length > 0 && (
+                                <>
+                                    <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">✅ Survivors ({survivors.length})</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {survivors.map(id => (
+                                            <span key={id} className="font-nunito text-xs px-2.5 py-1 rounded-full"
+                                                style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#6EE7B7" }}>
+                                                ✓ {room.players.find(p => p.id === id)?.name ?? id}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Eliminated */}
+                            {eliminated.length > 0 && (
+                                <>
+                                    <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">💀 Eliminated ({eliminated.length})</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {eliminated.map(id => (
+                                            <span key={id} className="font-nunito text-xs px-2.5 py-1 rounded-full"
+                                                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "rgba(255,255,255,0.35)", textDecoration: "line-through" }}>
+                                                {room.players.find(p => p.id === id)?.name ?? id}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Points */}
+                            {Object.values(pointDeltas).some(d => d > 0) && (
+                                <>
+                                    <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">⭐ Points this match</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {room.players.filter(p => (pointDeltas[p.id] ?? 0) > 0).map((p, i) => (
+                                            <motion.div key={p.id}
+                                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 + i * 0.05 }}
+                                                className="vote-card flex items-center gap-2"
+                                                style={{ padding: "10px 12px", minHeight: 0 }}
+                                            >
+                                                <span className="font-nunito font-bold text-white text-sm truncate flex-1">{p.name}</span>
+                                                <span className="font-fredoka text-amber-400 flex-shrink-0">+{pointDeltas[p.id]}</span>
+                                                <span className="flex-shrink-0">{ROLE_EMOJI[roles[p.id] ?? "villager"]}</span>
+                                            </motion.div>
+                                        ))}
                                     </div>
                                 </>
                             )}

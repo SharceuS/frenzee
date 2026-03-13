@@ -7,6 +7,7 @@ const {
   broadcast, startRound, resolveRound,
   checkAllAnswered, checkAllVoted, checkAllMatched,
   validateBingoClaim, advanceSpyfallTurn,
+  resolveMafiaNight, startMafiaDoctorPhase, startMafiaDetectivePhase, resolveMafiaDay,
 } = require("../games/rounds");
 
 const router = Router();
@@ -84,6 +85,12 @@ router.post("/:code/vote", withRoom, (req, res) => {
   if (room.phase !== "voting") return res.status(400).json({ ok: false, error: "Not voting phase" });
   if (room.gameType === "guess_the_liar" && playerId === targetId) return res.status(400).json({ ok: false });
   if (room.gameType === "spyfall" && playerId === targetId) return res.status(400).json({ ok: false, error: "Cannot vote for yourself" });
+  if (room.gameType === "mafia") {
+    const alive = room.mafiaAliveIds || [];
+    if (!alive.includes(playerId)) return res.status(403).json({ ok: false, error: "Dead players cannot vote" });
+    if (playerId === targetId) return res.status(400).json({ ok: false, error: "Cannot vote for yourself" });
+    if (!alive.includes(targetId)) return res.status(400).json({ ok: false, error: "Target is not alive" });
+  }
   if (room.gameType === "two_truths" && playerId === room.spotlightId) return res.status(403).json({ ok: false });
   if (room.gameType === "debate_pit") {
     if (room.debaterIds.includes(playerId)) return res.status(403).json({ ok: false });
@@ -93,7 +100,10 @@ router.post("/:code/vote", withRoom, (req, res) => {
   if (answerVoteGames.includes(room.gameType) && playerId === targetId) return res.status(400).json({ ok: false });
   room.votes[playerId] = targetId;
   broadcast(room.code);
-  if (checkAllVoted(room)) resolveRound(room);
+  if (checkAllVoted(room)) {
+    if (room.gameType === "mafia") { resolveMafiaDay(room); return res.json({ ok: true }); }
+    resolveRound(room);
+  }
   res.json({ ok: true });
 });
 
@@ -111,6 +121,10 @@ router.post("/:code/match", withRoom, (req, res) => {
 // POST /rooms/:code/round/next  — host advances to next round
 router.post("/:code/round/next", withRoom, hostOnly, (req, res) => {
   const room = req.room;
+  // Mafia is a single-match game; only allow next from results screen.
+  if (room.gameType === "mafia" && !["results", "scoreboard"].includes(room.phase)) {
+    return res.status(400).json({ ok: false, error: "Cannot skip an active Mafia game" });
+  }
   if (room.round >= room.maxRounds) {
     room.phase = "scoreboard";
     broadcast(room.code);
@@ -164,6 +178,69 @@ router.post("/:code/spyfall/guess", withRoom, (req, res) => {
   if (!guess || typeof guess !== "string" || !guess.trim()) return res.status(400).json({ ok: false, error: "Guess required" });
   room.spyfallGuess = guess.trim();
   resolveRound(room);
+  res.json({ ok: true });
+});
+
+// ── Mafia ─────────────────────────────────────────────────────────────────────
+
+// POST /rooms/:code/mafia/night-kill  — Mafia player selects a kill target
+router.post("/:code/mafia/night-kill", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId, targetId } = req.body;
+  if (room.phase !== "mafia_night") return res.status(400).json({ ok: false, error: "Not mafia night" });
+  const alive = room.mafiaAliveIds || [];
+  if (!alive.includes(playerId)) return res.status(403).json({ ok: false, error: "Not alive" });
+  if (room.mafiaRoles[playerId] !== "mafia") return res.status(403).json({ ok: false, error: "Not Mafia" });
+  if (!alive.includes(targetId) || room.mafiaRoles[targetId] === "mafia") {
+    return res.status(400).json({ ok: false, error: "Invalid target" });
+  }
+  room.mafiaNightTargetId = targetId;
+  startMafiaDoctorPhase(room);
+  res.json({ ok: true });
+});
+
+// POST /rooms/:code/mafia/doctor-save  — Doctor selects a player to protect
+router.post("/:code/mafia/doctor-save", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId, targetId } = req.body;
+  if (room.phase !== "doctor_night") return res.status(400).json({ ok: false, error: "Not doctor night" });
+  const alive = room.mafiaAliveIds || [];
+  if (!alive.includes(playerId)) return res.status(403).json({ ok: false, error: "Not alive" });
+  if (room.mafiaRoles[playerId] !== "doctor") return res.status(403).json({ ok: false, error: "Not the Doctor" });
+  if (!alive.includes(targetId)) return res.status(400).json({ ok: false, error: "Target is not alive" });
+  room.mafiaDoctorSaveId = targetId;
+  startMafiaDetectivePhase(room);
+  res.json({ ok: true });
+});
+
+// POST /rooms/:code/mafia/detective-check  — Detective investigates a player
+router.post("/:code/mafia/detective-check", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId, targetId } = req.body;
+  if (room.phase !== "detective_night") return res.status(400).json({ ok: false, error: "Not detective night" });
+  const alive = room.mafiaAliveIds || [];
+  if (!alive.includes(playerId)) return res.status(403).json({ ok: false, error: "Not alive" });
+  if (room.mafiaRoles[playerId] !== "detective") return res.status(403).json({ ok: false, error: "Not the Detective" });
+  if (playerId === targetId) return res.status(400).json({ ok: false, error: "Cannot investigate yourself" });
+  if (!alive.includes(targetId)) return res.status(400).json({ ok: false, error: "Target is not alive" });
+  room.mafiaDetectiveCheckId = targetId;
+  resolveMafiaNight(room);
+  res.json({ ok: true });
+});
+
+// POST /rooms/:code/mafia/day-start  — host ends discussion and opens voting
+router.post("/:code/mafia/day-start", withRoom, hostOnly, (req, res) => {
+  const room = req.room;
+  if (room.phase !== "day_discussion") return res.status(400).json({ ok: false, error: "Not in day discussion" });
+  if (room._mafiaDayTimer) { clearTimeout(room._mafiaDayTimer); room._mafiaDayTimer = null; }
+  room.votes = {};
+  room.phase = "voting";
+  broadcast(room.code);
+  room._mafiaVoteTimer = setTimeout(() => {
+    const r = getRoom(room.code);
+    if (!r || r.phase !== "voting" || r.gameType !== "mafia") return;
+    resolveMafiaDay(r);
+  }, 60000);
   res.json({ ok: true });
 });
 

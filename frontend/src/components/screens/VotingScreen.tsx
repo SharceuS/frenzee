@@ -12,6 +12,7 @@ interface Props {
 const VOTE_CONFIGS: Record<string, { emoji: string; title: string; subtitle: string; btnLabel: string }> = {
     guess_the_liar: { emoji: "🕵️", title: "Spot the Liar!", subtitle: "Who wrote the fake answer?", btnLabel: "Vote" },
     spyfall: { emoji: "🔍", title: "Who is the Spy?", subtitle: "Vote for the most suspicious player", btnLabel: "Vote" },
+    mafia:   { emoji: "⚖️", title: "Who is Mafia?",   subtitle: "Vote to eliminate the most suspicious player", btnLabel: "Eliminate" },
     two_truths: { emoji: "✌️", title: "Which is the Lie?", subtitle: "Spot the fake statement", btnLabel: "That's the Lie" },
     roast_room: { emoji: "🎭", title: "Vote the Funniest!", subtitle: "Which roast cracked you up?", btnLabel: "Vote Funniest" },
     debate_pit: { emoji: "⚔️", title: "Vote the Winner!", subtitle: "Who argued better?", btnLabel: "Vote" },
@@ -51,6 +52,7 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
         if (gt === "guess_the_liar") return targetId !== myId;
         if (gt === "two_truths") return myId !== room.spotlightId;
         if (gt === "debate_pit") return !room.debaterIds?.includes(myId);
+        if (gt === "mafia") return (room.mafiaAliveIds ?? []).includes(myId) && targetId !== myId;
         // Prevent self-voting in all answer-based games
         if (ANONYMOUS_VOTE_GAMES.includes(gt)) return targetId !== myId;
         return targetId !== myId;
@@ -63,13 +65,16 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
     };
 
     const isSpectator = (gt === "two_truths" && myId === room.spotlightId)
-        || (gt === "debate_pit" && room.debaterIds?.includes(myId));
+        || (gt === "debate_pit" && room.debaterIds?.includes(myId))
+        || (gt === "mafia" && !(room.mafiaAliveIds ?? []).includes(myId));
 
     const total = gt === "two_truths"
         ? room.players.filter(p => p.id !== room.spotlightId).length
         : gt === "debate_pit"
             ? room.players.filter(p => !room.debaterIds?.includes(p.id)).length
-            : room.players.length;
+            : gt === "mafia"
+                ? (room.mafiaAliveIds ?? []).length
+                : room.players.length;
 
     return (
         <div className="page-fill gap-3">
@@ -124,6 +129,30 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                     </div>
                                 </motion.button>
                             ))}
+                        </>
+                    )}
+
+                    {/* MAFIA: vote to eliminate an alive player */}
+                    {gt === "mafia" && (
+                        <>
+                            <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">⚖️ Alive players — vote to eliminate</p>
+                            {room.players
+                                .filter(p => (room.mafiaAliveIds ?? []).includes(p.id) && p.id !== myId)
+                                .map((p, i) => (
+                                    <motion.button key={p.id}
+                                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.07 }}
+                                        onClick={() => handle(p.id)}
+                                        disabled={hasVoted}
+                                        className={`vote-card w-full text-left ${
+                                            voted === p.id ? "selected" : ""
+                                        } ${hasVoted && voted !== p.id ? "opacity-40" : ""}`}>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
+                                            {voted === p.id && <span className="font-nunito text-purple-300 text-xs">Your pick ✓</span>}
+                                        </div>
+                                    </motion.button>
+                                ))}
                         </>
                     )}
 

@@ -22,6 +22,8 @@ const SSE_EVENTS = [
   "bomber_grid",
   "bomber_state",
   "your_spyfall_role",
+  "your_mafia_role",
+  "detective_result",
   "error_msg",
 ] as const;
 

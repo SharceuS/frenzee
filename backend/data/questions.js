@@ -1768,6 +1768,38 @@ const SPYFALL_LOCATIONS = [
   { name: "Wild West Town",       roles: ["Sheriff", "Outlaw", "Barkeeper", "Gold Miner", "Gunslinger", "Travelling Merchant"] },
 ];
 
+const { applyQuestionExpansions } = require("./question-expansions");
+
+applyQuestionExpansions({
+  GUESS_THE_LIAR,
+  TWO_TRUTHS_TOPICS,
+  MOST_LIKELY_TO,
+  NEVER_HAVE_I_EVER,
+  WOULD_YOU_RATHER,
+  HOT_TAKES,
+  ROAST_ROOM,
+  RED_FLAG_RADAR,
+  VIBE_CHECK_CATEGORIES,
+  DEBATE_PIT_TOPICS,
+  WORD_ASSOCIATION,
+  EMOJI_STORIES,
+  FINISH_THE_SENTENCE,
+  THIS_OR_THAT,
+  UNHINGED_ADVICE,
+  CONFESSIONS_PROMPTS,
+  SPEED_ROUND,
+  PICK_YOUR_POISON,
+  BURN_OR_BUILD,
+  RATE_THAT_TAKE,
+  SUPERLATIVES,
+  WHOSE_LINE_PROMPTS,
+  TRIVIA_BLITZ,
+  DRAW_IT_WORDS,
+  WORD_BOMB_PATTERNS,
+  BINGO_ITEMS,
+  SPYFALL_LOCATIONS,
+});
+
 module.exports = {
   GUESS_THE_LIAR,
   TWO_TRUTHS_TOPICS,

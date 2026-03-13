@@ -32,6 +32,10 @@ function checkAllAnswered(room) {
 
 function checkAllVoted(room) {
   const gt = room.gameType;
+  if (gt === "mafia") {
+    const alive = room.mafiaAliveIds || [];
+    return alive.length > 0 && alive.every(id => room.votes[id] !== undefined);
+  }
   if (gt === "two_truths") {
     return room.players.filter(p => p.id !== room.spotlightId).every(p => room.votes[p.id] !== undefined);
   }
@@ -85,6 +89,7 @@ function startRound(room) {
   room.answers = {}; room.votes = {}; room.matchGuesses = {};
   room.liarId = null; room.spotlightId = null; room.debaterIds = [];
   room.roundResult = null;
+  room.triviaCorrectIndex = null;
   const gt = room.gameType;
 
   if (gt === "guess_the_liar") {
@@ -202,8 +207,15 @@ function startRound(room) {
   // ── ARCADE ──────────────────────────────────────────────────────────────────
   else if (gt === "trivia_blitz") {
     const q = pickQ(TRIVIA_BLITZ, room);
+    const shuffledOptions = shuffle(
+      q.options.map((option, index) => ({ option, isCorrect: index === q.correct }))
+    );
     room.currentQuestion = q.q;
-    room.questionData = { options: q.options, correctIndex: q.correct, category: q.cat };
+    room.triviaCorrectIndex = shuffledOptions.findIndex((entry) => entry.isCorrect);
+    room.questionData = {
+      options: shuffledOptions.map((entry) => entry.option),
+      category: q.cat,
+    };
     room.triviaAnswerTimes = {}; room.triviaStartTime = Date.now();
     room.phase = "trivia"; broadcast(room.code);
     room._triviaTimer = setTimeout(() => {
@@ -286,6 +298,46 @@ function startRound(room) {
       room.phase = "spyfall_discussion"; broadcast(room.code);
       startSpyfallTurnTimer(room);
     }, 5000);
+  } else if (gt === "mafia") {
+    // ── Mafia: assign hidden roles and deliver them privately ─────────────────
+    const n = room.players.length;
+    const mafiaCount = n >= 7 ? 2 : 1;
+    const shuffled = shuffle(room.players);
+    room.mafiaRoles = {};
+    room.mafiaAliveIds = room.players.map(p => p.id);
+    room.mafiaDeadIds = [];
+    room.mafiaNightTargetId = null;
+    room.mafiaDoctorSaveId = null;
+    room.mafiaDetectiveCheckId = null;
+    room.mafiaEliminatedId = null;
+    room.mafiaRoundSummary = null;
+    room.mafiaWinner = null;
+    room._mafiaDayTimer = null;
+    room._mafiaVoteTimer = null;
+    // First mafiaCount → Mafia, next → Doctor, next → Detective, rest → Villager
+    shuffled.forEach((p, i) => {
+      if (i < mafiaCount) room.mafiaRoles[p.id] = "mafia";
+      else if (i === mafiaCount) room.mafiaRoles[p.id] = "doctor";
+      else if (i === mafiaCount + 1) room.mafiaRoles[p.id] = "detective";
+      else room.mafiaRoles[p.id] = "villager";
+    });
+    const mafiaTeam = room.players.filter(p => room.mafiaRoles[p.id] === "mafia").map(p => ({ id: p.id, name: p.name }));
+    room.players.forEach(p => {
+      const role = room.mafiaRoles[p.id];
+      sseSend(room.code, p.id, "your_mafia_role", {
+        role,
+        mafiaTeam: role === "mafia" ? mafiaTeam : null,
+      });
+    });
+    room.currentQuestion = null;
+    room.questionData = { mafiaCount, playerCount: n };
+    room.phase = "question"; broadcast(room.code);
+    // Auto-advance to first night after 7 s.
+    setTimeout(() => {
+      const r = getRoom(room.code);
+      if (!r || r.phase !== "question" || r.gameType !== "mafia") return;
+      r.phase = "mafia_night"; broadcast(r.code);
+    }, 7000);
   } else if (gt === "bingo") {
     // Assign a unique shuffled 5×5 card to every player.
     // Card is stored as 25 item-indices from BINGO_ITEMS.
@@ -573,7 +625,7 @@ function resolveRound(room) {
     result = { voteCounts: vc, winnerIds: winners.map(p => p.id) };
   } else if (gt === "trivia_blitz") {
     if (room._triviaTimer) { clearTimeout(room._triviaTimer); room._triviaTimer = null; }
-    const correctIdx = room.questionData?.correctIndex;
+    const correctIdx = room.triviaCorrectIndex;
     const elapsed = Date.now() - (room.triviaStartTime || Date.now());
     const answerTimes = room.triviaAnswerTimes || {};
     const breakdown = {};
@@ -817,10 +869,161 @@ function handleDisconnect(code, playerId) {
   broadcast(code);
 }
 
+// ── Mafia helpers ─────────────────────────────────────────────────────────────
+
+function checkMafiaWin(room) {
+  const mafiaAlive = room.mafiaAliveIds.filter(id => room.mafiaRoles[id] === "mafia");
+  const townAlive = room.mafiaAliveIds.filter(id => room.mafiaRoles[id] !== "mafia");
+  if (mafiaAlive.length === 0) return "town";
+  if (mafiaAlive.length >= townAlive.length) return "mafia";
+  return null;
+}
+
+function resolveMafiaMatch(room, winner) {
+  room.mafiaWinner = winner;
+  const scoreBefore = {};
+  room.players.forEach(p => { scoreBefore[p.id] = p.score; });
+  const winningIds = winner === "mafia"
+    ? room.players.filter(p => room.mafiaRoles[p.id] === "mafia").map(p => p.id)
+    : room.mafiaAliveIds.filter(id => room.mafiaRoles[id] !== "mafia");
+  winningIds.forEach(id => {
+    const p = room.players.find(x => x.id === id);
+    if (p) p.score += 250;
+  });
+  const pointDeltas = {};
+  room.players.forEach(p => { pointDeltas[p.id] = p.score - (scoreBefore[p.id] ?? 0); });
+  const topScore = Math.max(...room.players.map(p => p.score), 0);
+  const firstPlaceIds = room.players.filter(p => p.score === topScore).map(p => p.id);
+  room.roundResult = {
+    winner,
+    winnerIds: winningIds,
+    survivors: [...room.mafiaAliveIds],
+    eliminated: [...room.mafiaDeadIds],
+    roles: room.mafiaRoles,
+    pointDeltas,
+    firstPlaceIds,
+    winnersDetailed: winningIds.map(id => {
+      const p = room.players.find(x => x.id === id);
+      return p ? { id: p.id, name: p.name, avatar: p.avatar ?? null, score: p.score, delta: pointDeltas[id] ?? 0 } : { id };
+    }),
+  };
+  // Force next-round click to go to scoreboard (single-match game).
+  room.round = room.maxRounds;
+  room.phase = "results";
+  broadcast(room.code);
+}
+
+/**
+ * Resolve the night: compare kill vs doctor save, deliver detective result,
+ * update alive/dead, then move to day_discussion with a 45 s auto-advance timer.
+ */
+function resolveMafiaNight(room) {
+  const targetId = room.mafiaNightTargetId;
+  const savedId = room.mafiaDoctorSaveId;
+  const saved = !!(targetId && targetId === savedId);
+
+  // Private detective result
+  const detectiveId = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "detective");
+  if (detectiveId && room.mafiaDetectiveCheckId) {
+    const checkId = room.mafiaDetectiveCheckId;
+    sseSend(room.code, detectiveId, "detective_result", {
+      targetId: checkId,
+      targetName: room.players.find(p => p.id === checkId)?.name ?? checkId,
+      isMafia: room.mafiaRoles[checkId] === "mafia",
+    });
+  }
+
+  let killedId = null;
+  if (targetId && !saved) {
+    killedId = targetId;
+    room.mafiaAliveIds = room.mafiaAliveIds.filter(id => id !== killedId);
+    room.mafiaDeadIds.push(killedId);
+    room.mafiaEliminatedId = killedId;
+  }
+
+  room.mafiaRoundSummary = { killedId, saved, night: room.mafiaDeadIds.length };
+  room.mafiaNightTargetId = null;
+  room.mafiaDoctorSaveId = null;
+  room.mafiaDetectiveCheckId = null;
+
+  const winner = checkMafiaWin(room);
+  if (winner) { resolveMafiaMatch(room, winner); return; }
+
+  room.votes = {};
+  room.phase = "day_discussion"; broadcast(room.code);
+  // 45 s auto-advance to voting if host doesn't click first.
+  if (room._mafiaDayTimer) clearTimeout(room._mafiaDayTimer);
+  room._mafiaDayTimer = setTimeout(() => {
+    const r = getRoom(room.code);
+    if (!r || r.phase !== "day_discussion" || r.gameType !== "mafia") return;
+    r._mafiaDayTimer = null;
+    r.votes = {};
+    r.phase = "voting"; broadcast(r.code);
+    r._mafiaVoteTimer = setTimeout(() => {
+      const rr = getRoom(r.code);
+      if (!rr || rr.phase !== "voting" || rr.gameType !== "mafia") return;
+      resolveMafiaDay(rr);
+    }, 60000);
+  }, 45000);
+}
+
+/**
+ * Transition to doctor_night. If no doctor is alive, skip straight.
+ */
+function startMafiaDoctorPhase(room) {
+  const aliveDoctor = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "doctor");
+  if (!aliveDoctor) { startMafiaDetectivePhase(room); return; }
+  room.phase = "doctor_night"; broadcast(room.code);
+}
+
+/**
+ * Transition to detective_night. If no detective is alive, skip straight.
+ */
+function startMafiaDetectivePhase(room) {
+  const aliveDetective = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "detective");
+  if (!aliveDetective) { resolveMafiaNight(room); return; }
+  room.phase = "detective_night"; broadcast(room.code);
+}
+
+/**
+ * Resolve the day vote. Eliminate the player with unique plurality.
+ * If tied: no elimination. Then check win condition or loop to next night.
+ */
+function resolveMafiaDay(room) {
+  if (room._mafiaVoteTimer) { clearTimeout(room._mafiaVoteTimer); room._mafiaVoteTimer = null; }
+  const vc = {};
+  room.mafiaAliveIds.forEach(id => { vc[id] = 0; });
+  Object.entries(room.votes).forEach(([voterId, targetId]) => {
+    if (room.mafiaAliveIds.includes(voterId) && targetId) {
+      vc[targetId] = (vc[targetId] || 0) + 1;
+    }
+  });
+  const max = Math.max(...Object.values(vc), 0);
+  const topIds = Object.keys(vc).filter(id => vc[id] === max && max > 0);
+  const eliminatedId = topIds.length === 1 ? topIds[0] : null;
+  if (eliminatedId) {
+    room.mafiaAliveIds = room.mafiaAliveIds.filter(id => id !== eliminatedId);
+    room.mafiaDeadIds.push(eliminatedId);
+    room.mafiaEliminatedId = eliminatedId;
+  } else {
+    room.mafiaEliminatedId = null;
+  }
+  const winner = checkMafiaWin(room);
+  if (winner) { resolveMafiaMatch(room, winner); return; }
+  // Loop: reset and start next night.
+  room.mafiaNightTargetId = null;
+  room.mafiaDoctorSaveId = null;
+  room.mafiaDetectiveCheckId = null;
+  room.votes = {};
+  room.mafiaRoundSummary = null;
+  room.phase = "mafia_night"; broadcast(room.code);
+}
+
 module.exports = {
   broadcast, startRound, resolveRound, handleDisconnect,
   checkAllAnswered, checkAllVoted, checkAllMatched,
   getNextAliveBombPlayer, startBombTimer,
   validateBingoClaim, scheduleBingoCall,
   advanceSpyfallTurn,
+  resolveMafiaNight, startMafiaDoctorPhase, startMafiaDetectivePhase, resolveMafiaDay,
 };

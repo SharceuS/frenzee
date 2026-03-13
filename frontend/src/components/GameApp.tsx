@@ -6,8 +6,9 @@ import {
   apiSubmitAnswer, apiSubmitVote, apiSubmitMatchGuesses,
   apiNextRound, apiPlayAgain,
   apiSpyfallDiscuss, apiSpyfallAccuse, apiSpyfallGuess,
+  apiMafiaNightKill, apiMafiaDoctorSave, apiMafiaDetectiveCheck, apiMafiaDayStart,
 } from "@/lib/api";
-import { Room, Phase, SpyfallRole } from "@/lib/types";
+import { Room, Phase, SpyfallRole, MafiaRole, DetectiveResult } from "@/lib/types";
 import { AnimatePresence, motion } from "framer-motion";
 
 import HomeScreen from "./screens/HomeScreen";
@@ -28,6 +29,7 @@ import WordBombScreen from "./screens/WordBombScreen";
 import ReactionTapScreen from "./screens/ReactionTapScreen";
 import BingoScreen from "./screens/BingoScreen";
 import SpyfallScreen from "./screens/SpyfallScreen";
+import MafiaScreen from "./screens/MafiaScreen";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -41,6 +43,7 @@ const GAME_MIN_PLAYERS: Record<string, number> = {
     red_flag_radar: 2, vibe_check: 3, debate_pit: 4, trivia_blitz: 2,
     draw_it: 2, word_bomb: 2, reaction_tap: 2, bingo: 2,
     spyfall: 4,
+    mafia: 5,
     finish_the_sentence: 3, confessions: 3, whose_line: 3, emoji_story: 3, unhinged_advice: 3,
     burn_or_build: 4, speed_round: 2, superlatives: 3, word_association: 2,
 };
@@ -49,6 +52,7 @@ const ACTIVE_GAME_PHASES = new Set<string>([
     "question", "answering", "voting", "matching", "debate_write", "debate_vote",
     "trivia", "drawing", "word_bomb", "reaction", "bingo_live",
     "spyfall_discussion", "spyfall_guess",
+    "mafia_night", "doctor_night", "detective_night", "day_discussion",
 ]);
 
 export default function GameApp() {
@@ -58,6 +62,8 @@ export default function GameApp() {
     const [myRole, setMyRole] = useState<"liar" | "truth_teller" | null>(null);
     const [myDebateRole, setMyDebateRole] = useState<{ position: string; side: "for" | "against" } | null>(null);
     const [mySpyfallRole, setMySpyfallRole] = useState<SpyfallRole | null>(null);
+    const [myMafiaRole, setMyMafiaRole] = useState<MafiaRole | null>(null);
+    const [detectiveResult, setDetectiveResult] = useState<DetectiveResult | null>(null);
     const [errorMsg, setErrorMsg] = useState("");
     const [playerLeftMsg, setPlayerLeftMsg] = useState("");
     const [isConnectingRoom, setIsConnectingRoom] = useState(false);
@@ -77,6 +83,8 @@ export default function GameApp() {
         const onRole = ({ role }: { role: "liar" | "truth_teller" }) => setMyRole(role);
         const onDebate = (d: { position: string; side: "for" | "against" }) => setMyDebateRole(d);
         const onSpyfallRole = (d: SpyfallRole) => setMySpyfallRole(d);
+        const onMafiaRole = (d: MafiaRole) => setMyMafiaRole(d);
+        const onDetectiveResult = (d: DetectiveResult) => setDetectiveResult(d);
         const onError = (msg: string) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(""), 3000); };
 
         on("room_update", onRoom);
@@ -84,6 +92,8 @@ export default function GameApp() {
         on("your_role", onRole);
         on("your_debate_role", onDebate);
         on("your_spyfall_role", onSpyfallRole);
+        on("your_mafia_role", onMafiaRole);
+        on("detective_result", onDetectiveResult);
         on("error_msg", onError);
         return () => {
             off("room_update", onRoom);
@@ -91,6 +101,8 @@ export default function GameApp() {
             off("your_role", onRole);
             off("your_debate_role", onDebate);
             off("your_spyfall_role", onSpyfallRole);
+            off("your_mafia_role", onMafiaRole);
+            off("detective_result", onDetectiveResult);
             off("error_msg", onError);
         };
     }, [on, off, myId]);
@@ -117,8 +129,8 @@ export default function GameApp() {
                 setMyId("");
                 setMyRole(null);
                 setMyDebateRole(null);
-                setMySpyfallRole(null);
-                setErrorMsg("");
+                setMySpyfallRole(null);                setMyMafiaRole(null);
+                setDetectiveResult(null);                setErrorMsg("");
             }, 2800);
             return () => clearTimeout(t);
         }
@@ -141,6 +153,8 @@ export default function GameApp() {
             setMyRole(null);
             setMyDebateRole(null);
             setMySpyfallRole(null);
+            setMyMafiaRole(null);
+            setDetectiveResult(null);
             setErrorMsg("");
         }, 2800);
         return () => clearTimeout(t);
@@ -167,6 +181,8 @@ export default function GameApp() {
             bingoCards: null, bingoCalledItems: [], bingoWinners: [],
             spyfallTurns: null, spyfallTurnIndex: null, spyfallAskerId: null, spyfallTargetId: null,
             spyfallAccusedId: null, spyfallSpyId: null, spyfallLocation: null, spyfallGuess: null, spyfallLocationNames: null,
+            mafiaAliveIds: [], mafiaDeadIds: [], mafiaEliminatedId: null,
+            mafiaRoundSummary: null, mafiaRoleReveal: null, mafiaWinner: null,
         } as Room);
 
         const res = await apiCreateRoom(name, avatar);
@@ -224,19 +240,22 @@ export default function GameApp() {
     }, [room, myId]);
 
     const nextRound = useCallback(() => {
-        if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); apiNextRound(room.code, myId); }
+        if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); setMyMafiaRole(null); setDetectiveResult(null); apiNextRound(room.code, myId); }
     }, [room, myId]);
 
     const playAgain = useCallback(() => {
-        if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); apiPlayAgain(room.code, myId); }
+        if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); setMyMafiaRole(null); setDetectiveResult(null); apiPlayAgain(room.code, myId); }
     }, [room, myId]);
 
     // ── Screen router ────────────────────────────────
     // Lobby key must NOT include gameType — selecting a game would remount the whole screen & reset tab state
+    // Mafia cycles multiple rounds within round=1, so key off dead-count instead
+    const gt = room?.gameType ?? "";
     const screenKey = phase === "lobby"
         ? "lobby"
-        : `${phase}-${room?.gameType ?? ""}-${room?.round ?? 0}`;
-    const gt = room?.gameType ?? "";
+        : gt === "mafia"
+            ? `${phase}-mafia-${room?.mafiaDeadIds?.length ?? 0}`
+            : `${phase}-${gt}-${room?.round ?? 0}`;
     const binaryAnswerGames = ["never_have_i_ever", "would_you_rather", "hot_takes", "pick_your_poison"];
 
     return (
@@ -285,8 +304,27 @@ export default function GameApp() {
                             onSelectGame={selectGame} onStart={startGame} />
                     )}
 
-                    {phase === "question" && room && gt !== "spyfall" && (
+                    {phase === "question" && room && gt !== "spyfall" && gt !== "mafia" && (
                         <QuestionScreen room={room} myRole={myRole} myDebateRole={myDebateRole} />
+                    )}
+
+                    {/* Mafia: role reveal, night phases, day discussion */}
+                    {(phase === "question" && gt === "mafia" ||
+                      phase === "mafia_night" ||
+                      phase === "doctor_night" ||
+                      phase === "detective_night" ||
+                      phase === "day_discussion") && room && (
+                        <MafiaScreen
+                            room={room}
+                            myId={myId}
+                            myMafiaRole={myMafiaRole}
+                            detectiveResult={detectiveResult}
+                            isHost={isHost}
+                            onNightKill={(targetId) => apiMafiaNightKill(room.code, myId, targetId)}
+                            onDoctorSave={(targetId) => apiMafiaDoctorSave(room.code, myId, targetId)}
+                            onDetectiveCheck={(targetId) => apiMafiaDetectiveCheck(room.code, myId, targetId)}
+                            onDayStart={() => apiMafiaDayStart(room.code, myId)}
+                        />
                     )}
 
                     {/* Spyfall: role reveal (question phase), discussion, and spy guess */}

@@ -32,6 +32,7 @@ function createRoom(hostName, avatar) {
     matchGuesses: {},
     usedQuestions: [],
     roundResult: null,
+    triviaCorrectIndex: null,
   };
   return { playerId, room: rooms[code] };
 }
@@ -124,6 +125,16 @@ function sanitize(room) {
     spyfallGuess: room.phase === "results" ? (room.spyfallGuess ?? null) : null,
     // All possible location names — public; shown to all players during discussion
     spyfallLocationNames: room.spyfallLocationNames ?? null,
+    // Mafia — only safe public fields; roles never exposed except at results
+    mafiaAliveIds: room.mafiaAliveIds ?? [],
+    mafiaDeadIds: room.mafiaDeadIds ?? [],
+    mafiaEliminatedId: room.mafiaEliminatedId ?? null,
+    // Night summary only visible from day discussion onward
+    mafiaRoundSummary: ["day_discussion", "voting", "results"].includes(room.phase)
+      ? (room.mafiaRoundSummary ?? null) : null,
+    // Full role reveal only at results
+    mafiaRoleReveal: room.phase === "results" ? (room.mafiaRoles ?? null) : null,
+    mafiaWinner: room.mafiaWinner ?? null,
     // Room lifecycle
     // phase "disbanded" means the room is gone and every client should return home.
     disbandReason: room.disbandReason ?? null,     // null | "host_left" | "not_enough_players"

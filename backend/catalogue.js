@@ -188,6 +188,12 @@ const GAME_CATALOGUE = {
     category: "popular", minPlayers: 4, maxPlayers: 12, color: "#0EA5E9",
     active: true,
   },
+  mafia: {
+    id: "mafia", title: "Mafia", emoji: "🕵️",
+    description: "Hidden roles, secret night kills, public debates. Find the Mafia before it's too late.",
+    category: "popular", minPlayers: 5, maxPlayers: 12, color: "#DC2626",
+    active: true,
+  },
 };
 
 // Returns only active games — use this for the /catalogue endpoint.

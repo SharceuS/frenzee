@@ -42,6 +42,11 @@ export type Phase =
   // Spyfall phases
   | "spyfall_discussion"
   | "spyfall_guess"
+  // Mafia phases
+  | "mafia_night"
+  | "doctor_night"
+  | "detective_night"
+  | "day_discussion"
   // Terminal state
   | "disbanded";
 
@@ -136,6 +141,13 @@ export interface Room {
   spyfallLocation: string | null;
   spyfallGuess: string | null;
   spyfallLocationNames: string[] | null;
+  // Mafia
+  mafiaAliveIds: string[];
+  mafiaDeadIds: string[];
+  mafiaEliminatedId: string | null;
+  mafiaRoundSummary: { killedId: string | null; saved: boolean; night: number } | null;
+  mafiaRoleReveal: Record<string, "mafia" | "doctor" | "detective" | "villager"> | null;
+  mafiaWinner: "town" | "mafia" | null;
 }
 
 // ── Spyfall ───────────────────────────────────────
@@ -144,4 +156,16 @@ export interface SpyfallRole {
   location?: string;
   roleCard?: string;
   locationNames?: string[];
+}
+
+// ── Mafia ─────────────────────────────────────────
+export interface MafiaRole {
+  role: "mafia" | "doctor" | "detective" | "villager";
+  mafiaTeam: { id: string; name: string }[] | null;
+}
+
+export interface DetectiveResult {
+  targetId: string;
+  targetName: string;
+  isMafia: boolean;
 }
