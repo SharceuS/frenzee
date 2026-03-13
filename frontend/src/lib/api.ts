@@ -96,9 +96,9 @@ export async function apiBombermanPing(code: string, clientTs: number) {
 }
 
 // ── Bingo ─────────────────────────────────────────────────────────────────────
-export async function apiBingoClaim(code: string, playerId: string) {
+export async function apiBingoClaim(code: string, playerId: string, markedSlots: number[]) {
   return post<{ ok: boolean; pattern?: string; alreadyClaimed?: boolean; error?: string }>(
-    `/rooms/${code}/bingo/claim`, { playerId }
+    `/rooms/${code}/bingo/claim`, { playerId, markedSlots }
   );
 }
 

@@ -251,7 +251,7 @@ router.post("/:code/mafia/day-start", withRoom, hostOnly, (req, res) => {
 // No client-side mark state is trusted.
 router.post("/:code/bingo/claim", withRoom, (req, res) => {
   const room = req.room;
-  const { playerId } = req.body;
+  const { playerId, markedSlots } = req.body;
   if (room.phase !== "bingo_live") return res.status(400).json({ ok: false, error: "Not in bingo round" });
   const player = room.players.find(p => p.id === playerId);
   if (!player) return res.status(403).json({ ok: false, error: "Not in room" });
@@ -263,7 +263,8 @@ router.post("/:code/bingo/claim", withRoom, (req, res) => {
   if (!card) return res.status(400).json({ ok: false, error: "No card found" });
 
   const calledSet = new Set(room.bingoCalledItems || []);
-  const { valid, pattern } = validateBingoClaim(card, calledSet);
+  const safeMarkedSlots = Array.isArray(markedSlots) ? markedSlots : [];
+  const { valid, pattern } = validateBingoClaim(card, calledSet, safeMarkedSlots);
 
   if (!valid) return res.status(400).json({ ok: false, error: "No valid bingo pattern yet" });
 

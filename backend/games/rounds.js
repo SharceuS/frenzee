@@ -339,20 +339,20 @@ function startRound(room) {
       r.phase = "mafia_night"; broadcast(r.code);
     }, 7000);
   } else if (gt === "bingo") {
-    // Assign a unique shuffled 5×5 card to every player.
-    // Card is stored as 25 item-indices from BINGO_ITEMS.
+    // Assign a unique shuffled 5x5 number card to every player.
+    // Card is stored as 25 numbers from 1..75.
     // Position 12 is always FREE (index -1 sentinel).
     room.bingoCards = {};
     room.bingoCalledItems = [];
     room.bingoWinners = [];
     room._bingoCallTimer = null;
-    const BINGO_SIZE = 25;
-    const FREE_SLOT = 12; // center of 5×5
+    const BINGO_CARD_SLOTS = 25;
+    const FREE_SLOT = 12; // center of 5x5
     room.players.forEach(p => {
-      const pool = Array.from({ length: BINGO_ITEMS.length }, (_, i) => i);
-      const picked = shuffle(pool).slice(0, BINGO_SIZE - 1); // 24 unique items
+      const pool = Array.from({ length: 75 }, (_, i) => i + 1);
+      const picked = shuffle(pool).slice(0, BINGO_CARD_SLOTS - 1); // 24 unique numbers
       const card = [];
-      for (let i = 0; i < BINGO_SIZE; i++) {
+      for (let i = 0; i < BINGO_CARD_SLOTS; i++) {
         card.push(i === FREE_SLOT ? -1 : picked[i < FREE_SLOT ? i : i - 1]);
       }
       room.bingoCards[p.id] = card;
@@ -406,13 +406,13 @@ function advanceSpyfallTurn(room) {
 
 // ── Bingo helpers ─────────────────────────────────────────────────────────────
 
-const BINGO_CALL_INTERVAL = 8000; // ms between called items
+const BINGO_CALL_INTERVAL = 8000; // ms between called numbers
 const BINGO_SIZE = 5;
 const FREE_SLOT = 12;
 
 /**
- * Schedule the next item call for the active Bingo round.
- * Stops if the room is gone, phase changed, or all items have been called.
+ * Schedule the next number call for the active Bingo round.
+ * Stops if the room is gone, phase changed, or all numbers have been called.
  */
 function scheduleBingoCall(room) {
   if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
@@ -420,7 +420,7 @@ function scheduleBingoCall(room) {
     const r = getRoom(room.code);
     if (!r || r.phase !== "bingo_live") return;
     const called = new Set(r.bingoCalledItems);
-    // Build pool of uncalled item indices that appear on at least one card.
+    // Build pool of uncalled numbers that appear on at least one card.
     const onACard = new Set();
     Object.values(r.bingoCards).forEach(card => card.forEach(idx => { if (idx !== -1) onACard.add(idx); }));
     const remaining = [...onACard].filter(i => !called.has(i));
@@ -442,10 +442,18 @@ function scheduleBingoCall(room) {
  * Returns { valid: boolean, pattern: string|null }.
  * pattern is one of: 'row0'–'row4', 'col0'–'col4', 'diag_main', 'diag_anti'.
  */
-function validateBingoClaim(card, calledSet) {
-  // card[i] is -1 for FREE, otherwise an item index.
+function validateBingoClaim(card, calledSet, markedSlots = []) {
+  const selected = new Set(
+    markedSlots
+      .filter(slot => Number.isInteger(slot) && slot >= 0 && slot < BINGO_SIZE * BINGO_SIZE)
+      .map(slot => Number(slot))
+  );
+  selected.add(FREE_SLOT);
+
+  // card[i] is -1 for FREE, otherwise a bingo number.
   function marked(pos) {
-    return card[pos] === -1 || calledSet.has(card[pos]);
+    if (card[pos] === -1) return true;
+    return selected.has(pos) && calledSet.has(card[pos]);
   }
   // Rows
   for (let r = 0; r < BINGO_SIZE; r++) {
@@ -678,7 +686,7 @@ function resolveRound(room) {
       winnerIds: winners.map(w => w.id),
       winners,
       calledItems: room.bingoCalledItems,
-      calledLabels: (room.bingoCalledItems || []).map(i => BINGO_ITEMS[i]),
+      calledLabels: (room.bingoCalledItems || []).map(n => String(n)),
     };
   } else if (gt === "spyfall") {
     if (room.phase === "voting") {

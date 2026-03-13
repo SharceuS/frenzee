@@ -237,7 +237,7 @@ const ALL_GAMES = [
     // ─── Coming Soon ───
     {
         id: "mafia", emoji: "🎭", title: "Mafia", desc: "Find the traitors",
-        color: "#1D4ED8", cat: "social", soon: true,
+        color: "#1D4ED8", cat: "social",
         rules: [
             "The village is split — most are innocent townspeople, some are hidden mafia.",
             "Each night, the mafia secretly eliminates a villager.",
