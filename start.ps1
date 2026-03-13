@@ -16,7 +16,7 @@ Start-Sleep -Seconds 2
 
 # Start backend
 Write-Host "Starting backend on :4000 ..."
-$backend = Start-Process -FilePath "node" -ArgumentList "server.js" -WorkingDirectory "$ROOT\backend" -PassThru -NoNewWindow
+$backend = Start-Process -FilePath "node" -ArgumentList "index.js" -WorkingDirectory "$ROOT\backend" -PassThru -NoNewWindow
 
 Start-Sleep -Seconds 1
 

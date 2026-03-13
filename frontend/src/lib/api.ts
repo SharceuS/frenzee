@@ -101,3 +101,16 @@ export async function apiBingoClaim(code: string, playerId: string) {
     `/rooms/${code}/bingo/claim`, { playerId }
   );
 }
+
+// ── Spyfall ───────────────────────────────────────────────────────────────────
+export async function apiSpyfallDiscuss(code: string, playerId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/spyfall/discuss`, { playerId });
+}
+
+export async function apiSpyfallAccuse(code: string, playerId: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/spyfall/accuse`, { playerId });
+}
+
+export async function apiSpyfallGuess(code: string, playerId: string, guess: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/spyfall/guess`, { playerId, guess });
+}

@@ -234,20 +234,6 @@ const ALL_GAMES = [
         scoring: "1st: 1000 pts · 2nd: 800 pts · 3rd: 600 pts · Others: 300 pts.",
         minPlayers: 2, maxPlayers: 12, duration: "~15 sec/round",
     },
-    {
-        id: "bomberman", emoji: "💥", title: "Bomb Arena", desc: "Last one standing wins!",
-        color: "#EF4444", cat: "arcade",
-        rules: [
-            "You move freely around a grid arena. Use WASD/arrows or the D-pad.",
-            "Press SPACE or the 💣 button to drop a bomb.",
-            "Bombs explode after 3 seconds in a cross pattern.",
-            "Explosion lasts 2 seconds — don't stand in it!",
-            "Soft walls (crates) can be destroyed by bombs.",
-            "Last player alive wins the round!",
-        ],
-        scoring: "Winner gets +300 pts. Solo run: survive as long as possible.",
-        minPlayers: 1, maxPlayers: 4, duration: "1–3 min",
-    },
     // ─── Coming Soon ───
     {
         id: "mafia", emoji: "🎭", title: "Mafia", desc: "Find the traitors",

@@ -112,6 +112,21 @@ function sanitize(room) {
     bingoCards: room.bingoCards ?? null,          // { [playerId]: number[] } — 25 item-indices, index 12 is FREE
     bingoCalledItems: room.bingoCalledItems ?? [], // ordered list of called item indices
     bingoWinners: room.bingoWinners ?? [],         // [{ id, name, pattern }]
+    // Spyfall — secret fields (spyfallSpyId, spyfallLocation) are revealed only in results
+    spyfallTurns: room.spyfallTurns ?? [],         // [{ askerId, targetId }] — full ordered turn list
+    spyfallTurnIndex: room.spyfallTurnIndex ?? 0,
+    spyfallAskerId: room.spyfallAskerId ?? null,
+    spyfallTargetId: room.spyfallTargetId ?? null,
+    spyfallAccusedId: room.spyfallAccusedId ?? null,
+    // Location + spy identity only revealed once the round is over
+    spyfallSpyId: ["spyfall_guess", "results"].includes(room.phase) ? (room.spyfallSpyId ?? null) : null,
+    spyfallLocation: room.phase === "results" ? (room.spyfallLocation ?? null) : null,
+    spyfallGuess: room.phase === "results" ? (room.spyfallGuess ?? null) : null,
+    // All possible location names — public; shown to all players during discussion
+    spyfallLocationNames: room.spyfallLocationNames ?? null,
+    // Room lifecycle
+    // phase "disbanded" means the room is gone and every client should return home.
+    disbandReason: room.disbandReason ?? null,     // null | "host_left" | "not_enough_players"
   };
 }
 

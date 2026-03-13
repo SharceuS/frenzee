@@ -1733,6 +1733,41 @@ const BINGO_ITEMS = [
   "Someone says 'I told you so'",
 ];
 
+// ── SPYFALL ─────────────────────────────────────────────────────────────────
+// Each entry has a name and 6 role cards (with-replacement assignment at runtime).
+const SPYFALL_LOCATIONS = [
+  { name: "Beach",                roles: ["Lifeguard", "Sunbather", "Surfer", "Ice Cream Vendor", "Volleyball Player", "Photographer"] },
+  { name: "Hospital",             roles: ["Doctor", "Nurse", "Patient", "Surgeon", "Receptionist", "Paramedic"] },
+  { name: "Casino",               roles: ["Dealer", "Security Guard", "High Roller", "Bartender", "Pit Boss", "Croupier"] },
+  { name: "Airplane",             roles: ["Pilot", "Flight Attendant", "Passenger", "Co-Pilot", "Business Class Traveller", "Nervous Flyer"] },
+  { name: "University",           roles: ["Professor", "Student", "Janitor", "Librarian", "Security Guard", "Teaching Assistant"] },
+  { name: "Spy HQ",               roles: ["Field Agent", "Handler", "Analyst", "Tech Specialist", "Double Agent", "Receptionist"] },
+  { name: "Pirate Ship",          roles: ["Captain", "First Mate", "Cook", "Navigator", "Lookout", "Stowaway"] },
+  { name: "Movie Set",            roles: ["Director", "Actor", "Stunt Double", "Camera Operator", "Makeup Artist", "Producer"] },
+  { name: "Haunted House",        roles: ["Ghost", "Visitor", "Caretaker", "Paranormal Investigator", "Psychic", "Skeptic"] },
+  { name: "Space Station",        roles: ["Commander", "Astronaut", "Engineer", "Scientist", "Mission Control", "Medic"] },
+  { name: "Circus",               roles: ["Ringmaster", "Clown", "Acrobat", "Lion Tamer", "Trapeze Artist", "Ticket Seller"] },
+  { name: "Supermarket",          roles: ["Cashier", "Manager", "Shopper", "Stock Clerk", "Security Guard", "Deli Chef"] },
+  { name: "Prison",               roles: ["Warden", "Guard", "Prisoner", "Lawyer", "Counselor", "New Inmate"] },
+  { name: "Fine Dining",          roles: ["Head Chef", "Waiter", "Sommelier", "Food Critic", "Dishwasher", "Manager"] },
+  { name: "Football Stadium",     roles: ["Player", "Coach", "Referee", "Fan", "Commentator", "Groundskeeper"] },
+  { name: "Subway Station",       roles: ["Commuter", "Busker", "Station Attendant", "Tourist", "Inspector", "Pickpocket"] },
+  { name: "Royal Palace",         roles: ["King", "Queen", "Knight", "Servant", "Jester", "Foreign Diplomat"] },
+  { name: "Nightclub",            roles: ["DJ", "Bouncer", "Bartender", "Regular", "VIP Guest", "Promoter"] },
+  { name: "Primary School",       roles: ["Teacher", "Student", "Parent", "Principal", "Lunch Lady", "Teaching Aide"] },
+  { name: "Cruise Ship",          roles: ["Captain", "Passenger", "Entertainment Director", "Waiter", "Lifeguard", "Engineer"] },
+  { name: "Police Station",       roles: ["Detective", "Patrol Officer", "Suspect", "Desk Sergeant", "Lawyer", "Forensics Expert"] },
+  { name: "Bank",                 roles: ["Manager", "Teller", "Security Guard", "Customer", "Loan Officer", "Accountant"] },
+  { name: "Ski Resort",           roles: ["Ski Instructor", "Snowboarder", "Chalet Owner", "Lift Operator", "First Aider", "Beginner"] },
+  { name: "Submarine",            roles: ["Captain", "Sonar Operator", "Engineer", "Cook", "Navigator", "New Recruit"] },
+  { name: "Art Museum",           roles: ["Curator", "Tourist", "Security Guard", "Art Thief", "Restorer", "Student"] },
+  { name: "Wedding",              roles: ["Bride", "Groom", "Best Man", "Caterer", "Photographer", "Uninvited Aunt"] },
+  { name: "Music Festival",       roles: ["Headliner", "Stage Tech", "Security", "Merch Seller", "Super Fan", "Lost Person"] },
+  { name: "Desert Island",        roles: ["Castaway", "Rescue Pilot", "Scientist", "Reality TV Producer", "Survivalist", "Clueless Tourist"] },
+  { name: "Ancient Egypt",        roles: ["Pharaoh", "High Priest", "Builder", "Merchant", "Guard", "Archaeologist from the Future"] },
+  { name: "Wild West Town",       roles: ["Sheriff", "Outlaw", "Barkeeper", "Gold Miner", "Gunslinger", "Travelling Merchant"] },
+];
+
 module.exports = {
   GUESS_THE_LIAR,
   TWO_TRUTHS_TOPICS,
@@ -1760,4 +1795,5 @@ module.exports = {
   DRAW_IT_WORDS,
   WORD_BOMB_PATTERNS,
   BINGO_ITEMS,
+  SPYFALL_LOCATIONS,
 };

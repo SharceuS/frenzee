@@ -17,7 +17,7 @@ export const AVATAR_PALETTES = [
 /** Generate a deterministic default avatar from any string id */
 export function defaultAvatarFromId(id: string): AvatarConfig {
     const h = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    return { head: h % 8, eyes: (h >> 2) % 8, mouth: (h >> 4) % 8, color: (h >> 6) % 8 };
+    return { head: h % 12, eyes: (h >> 2) % 12, mouth: (h >> 4) % 12, color: (h >> 6) % 8 };
 }
 
 /* ─────────────────────────────────────────────
@@ -86,6 +86,35 @@ function Hair({ type, color }: { type: number; color: string }): React.ReactElem
                     <circle cx="27" cy="40" r="16" fill={color} />
                     <circle cx="73" cy="40" r="16" fill={color} />
                     <rect x="22" y="38" width="56" height="28" fill={color} />
+                </>
+            );
+        case 8: // side-swept bang
+            return (
+                <>
+                    <path d="M 26 64 A 24 24 0 0 1 74 64 L 74 44 C 72 11 28 11 26 44 Z" fill={color} />
+                    <path d="M 26 44 Q 38 20 72 28 L 62 42" fill={color} />
+                </>
+            );
+        case 9: // bun on top
+            return (
+                <>
+                    <path d="M 26 64 A 24 24 0 0 1 74 64 L 74 44 C 72 11 28 11 26 44 Z" fill={color} />
+                    <circle cx="50" cy="14" r="13" fill={color} />
+                </>
+            );
+        case 10: // pigtails
+            return (
+                <>
+                    <path d="M 26 64 A 24 24 0 0 1 74 64 L 74 44 C 72 11 28 11 26 44 Z" fill={color} />
+                    <circle cx="21" cy="44" r="10" fill={color} />
+                    <circle cx="79" cy="44" r="10" fill={color} />
+                </>
+            );
+        case 11: // wild spiky all-around
+            return (
+                <>
+                    <polygon points="50,4 43,20 32,10 36,26 18,24 30,36 15,44 30,48 22,62 38,58 38,68 50,60 62,68 62,58 78,62 70,48 85,44 70,36 82,24 64,26 68,10 57,20" fill={color} />
+                    <rect x="26" y="38" width="48" height="28" fill={color} />
                 </>
             );
         default:
@@ -188,6 +217,47 @@ function Eyes({ type }: { type: number }): React.ReactElement {
                     ))}
                 </>
             );
+        case 8: // sunglasses
+            return (
+                <>
+                    <rect x={lx - 8} y={ey - 6} width="16" height="12" rx="4" fill="#1a1a2e" />
+                    <rect x={rx - 8} y={ey - 6} width="16" height="12" rx="4" fill="#1a1a2e" />
+                    <line x1={lx + 8} y1={ey} x2={rx - 8} y2={ey} stroke="#1a1a2e" strokeWidth="2.5" />
+                    <line x1={lx - 8} y1={ey} x2={lx - 14} y2={ey - 2} stroke="#1a1a2e" strokeWidth="2" strokeLinecap="round" />
+                    <line x1={rx + 8} y1={ey} x2={rx + 14} y2={ey - 2} stroke="#1a1a2e" strokeWidth="2" strokeLinecap="round" />
+                </>
+            );
+        case 9: // beady dots
+            return (
+                <>
+                    <circle cx={lx} cy={ey} r="3" fill="#1a1a2e" />
+                    <circle cx={rx} cy={ey} r="3" fill="#1a1a2e" />
+                    <circle cx={lx + 1} cy={ey - 1} r="1" fill="white" fillOpacity="0.6" />
+                    <circle cx={rx + 1} cy={ey - 1} r="1" fill="white" fillOpacity="0.6" />
+                </>
+            );
+        case 10: // dollar sign eyes
+            return (
+                <>
+                    {([lx, rx] as number[]).map(x => (
+                        <text key={x} x={x} y={ey + 5} textAnchor="middle" fontSize="13"
+                            fill="#16A34A" style={{ userSelect: "none" }} fontWeight="bold">$</text>
+                    ))}
+                </>
+            );
+        case 11: // hypno spiral rings
+            return (
+                <>
+                    {([lx, rx] as number[]).map(x => (
+                        <g key={x}>
+                            <circle cx={x} cy={ey} r="7" fill="white" />
+                            <circle cx={x} cy={ey} r="5" fill="#7C3AED" />
+                            <circle cx={x} cy={ey} r="3" fill="white" />
+                            <circle cx={x} cy={ey} r="1.5" fill="#7C3AED" />
+                        </g>
+                    ))}
+                </>
+            );
         default:
             return <></>;
     }
@@ -251,6 +321,34 @@ function Mouth({ type }: { type: number }): React.ReactElement {
                 <line x1="36" y1={my + 3} x2="64" y2={my + 3}
                     stroke="#7B3A1A" strokeWidth="3" strokeLinecap="round" />
             );
+        case 8: // cat mouth (w shape)
+            return (
+                <>
+                    <path d={`M 36 ${my + 2} Q 42 ${my + 10} ${mx} ${my + 3} Q 58 ${my + 10} 64 ${my + 2}`}
+                        fill="none" stroke="#7B3A1A" strokeWidth="3" strokeLinecap="round" />
+                </>
+            );
+        case 9: // wide open laugh
+            return (
+                <>
+                    <path d={`M 32 ${my - 2} Q ${mx} ${my + 20} 68 ${my - 2}`} fill="#7B3A1A" />
+                    <ellipse cx={mx} cy={my + 7} rx="14" ry="10" fill="#B04020" />
+                </>
+            );
+        case 10: // zipper teeth
+            return (
+                <>
+                    <path d={`M 35 ${my} Q ${mx} ${my + 12} 65 ${my}`} fill="#7B3A1A" />
+                    {[37, 42, 47, 52, 57, 62].map((x, i) => (
+                        <rect key={i} x={x} y={my} width="4" height="6" rx="1" fill="white" />
+                    ))}
+                </>
+            );
+        case 11: // tiny cute smile
+            return (
+                <path d={`M 42 ${my + 1} Q ${mx} ${my + 8} 58 ${my + 1}`}
+                    fill="none" stroke="#7B3A1A" strokeWidth="3" strokeLinecap="round" />
+            );
         default:
             return <></>;
     }
@@ -266,7 +364,7 @@ interface SvgAvatarProps {
 }
 
 export default function SvgAvatar({ config, size = 44, className = "" }: SvgAvatarProps) {
-    const p = AVATAR_PALETTES[config.color % 8];
+    const p = AVATAR_PALETTES[config.color % AVATAR_PALETTES.length];
     const uid = `a${config.color}${config.head}${config.eyes}${config.mouth}`;
 
     return (
@@ -323,6 +421,15 @@ export default function SvgAvatar({ config, size = 44, className = "" }: SvgAvat
 /* ─────────────────────────────────────────────
    Picker sub-components for HomeScreen
 ───────────────────────────────────────────── */
-export const HEAD_LABELS = ["Clean", "Spiky", "Fluffy", "Cat Ears", "Mohawk", "Long", "Bob", "Afro"];
-export const EYES_LABELS = ["Open 👀", "Happy ^^", "Star ★", "Sleepy", "Heart ❤️", "Angry", "Wink 😉", "Dizzy ✕"];
-export const MOUTH_LABELS = ["Smile 😊", "Smirk 😏", "Whoa 😮", "Tongue 😛", "Sad 😢", "Grin 😁", "Cool 😌", "Meh 😑"];
+export const HEAD_LABELS = [
+    "Clean", "Spiky", "Fluffy", "Cat Ears", "Mohawk", "Long", "Bob", "Afro",
+    "Side Sweep", "Top Bun", "Pigtails", "Wild",
+];
+export const EYES_LABELS = [
+    "Open 👀", "Happy ^^", "Star ★", "Sleepy", "Heart ❤️", "Angry", "Wink 😉", "Dizzy ✕",
+    "Shades 😎", "Beady", "Money 💰", "Hypno",
+];
+export const MOUTH_LABELS = [
+    "Smile 😊", "Smirk 😏", "Whoa 😮", "Tongue 😛", "Sad 😢", "Grin 😁", "Cool 😌", "Meh 😑",
+    "Cat 🐱", "Laugh 😂", "Zipper 🤐", "Tiny",
+];

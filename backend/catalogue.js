@@ -171,12 +171,21 @@ const GAME_CATALOGUE = {
     id: "bomberman", title: "Bomb Arena", emoji: "💥",
     description: "Free movement arena! Place bombs to blast opponents. Last one standing wins!",
     category: "arcade", minPlayers: 1, maxPlayers: 4, color: "#EF4444",
-    active: true,
+    // Removed from active roster: real-time arcade feel requires a dedicated low-latency
+    // transport that is not compatible with the current SSE + HTTP platform model.
+    // Replacement candidates when the transport layer is ready: Blast Tactics, Party Artillery, Chain Grid.
+    active: false,
   },
   bingo: {
     id: "bingo", title: "Bingo", emoji: "🎱",
     description: "Everyone gets a personal 5x5 board. Mark off called items and shout Bingo first!",
     category: "popular", minPlayers: 2, maxPlayers: 12, color: "#6366F1",
+    active: true,
+  },
+  spyfall: {
+    id: "spyfall", title: "Spyfall", emoji: "🔍",
+    description: "One spy has no clue where you are. Ask clever questions — find the spy before they figure it out.",
+    category: "popular", minPlayers: 4, maxPlayers: 12, color: "#0EA5E9",
     active: true,
   },
 };

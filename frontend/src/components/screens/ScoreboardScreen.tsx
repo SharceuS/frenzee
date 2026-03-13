@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Room } from "@/lib/types";
+import SvgAvatar, { defaultAvatarFromId, AVATAR_PALETTES } from "@/components/SvgAvatar";
 
 interface Props {
     room: Room;
@@ -13,10 +14,30 @@ interface Props {
 const MEDALS = ["🥇", "🥈", "🥉"];
 const RANK_LABELS = ["1st", "2nd", "3rd"];
 
+function BossCrown() {
+    return (
+        <svg width="48" height="32" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 28 L11 6 L19 19 L24 2 L29 19 L37 6 L46 28 Z"
+                fill="#FBBF24" stroke="#F59E0B" strokeWidth="1.5" strokeLinejoin="round" />
+            <rect x="2" y="25" width="44" height="7" rx="3" fill="#F59E0B" />
+            <circle cx="24" cy="14" r="3.5" fill="#EC4899" />
+            <circle cx="9"  cy="22" r="2.5" fill="#7C3AED" />
+            <circle cx="39" cy="22" r="2.5" fill="#7C3AED" />
+        </svg>
+    );
+}
+
 export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Props) {
     const sorted = [...room.players].sort((a, b) => b.score - a.score);
-    const winner = sorted[0];
-    const isWinner = winner?.id === myId;
+    const topScore = sorted[0]?.score ?? 0;
+    const winners = sorted.filter(p => p.score === topScore);
+    const isWinner = winners.some(w => w.id === myId);
+    const isAllTied = winners.length >= room.players.length;
+    const isSolo = winners.length === 1;
+    // Cap avatars displayed in hero — overflow shown as a pill
+    const MAX_HERO_AVATARS = 3;
+    const heroWinners = isAllTied ? [] : winners.slice(0, MAX_HERO_AVATARS);
+    const heroOverflow = isAllTied ? 0 : Math.max(0, winners.length - MAX_HERO_AVATARS);
 
     useEffect(() => {
         import("canvas-confetti").then(m => {
@@ -39,13 +60,80 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
             >
                 <div className="text-8xl animate-bounce-slow" style={{ lineHeight: 1.2, display: "inline-block" }}>🏆</div>
                 <h1 className="font-fredoka text-5xl text-white mt-2">Game Over!</h1>
+
+                {/* Winner avatar(s) hero */}
+                {isAllTied ? (
+                    /* Everyone tied — show a big "draw" emoji instead of all avatars */
+                    <motion.div
+                        initial={{ scale: 0.6, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.3 }}
+                        className="mt-5 flex flex-col items-center gap-1"
+                    >
+                        <div className="text-5xl">🤝</div>
+                        <p className="font-fredoka text-white/70 text-base mt-1">All tied!</p>
+                    </motion.div>
+                ) : (
+                    <div className="flex justify-center gap-4 mt-5 flex-wrap">
+                        {heroWinners.map(w => {
+                            const avatarCfg = w.avatar ?? defaultAvatarFromId(w.id);
+                            const pal = AVATAR_PALETTES[avatarCfg.color % AVATAR_PALETTES.length];
+                            return (
+                                <div key={w.id} className="flex flex-col items-center gap-2">
+                                    {/* Boss crown — single winner only */}
+                                    {isSolo && (
+                                        <motion.div
+                                            initial={{ y: -28, opacity: 0, scale: 0.5, rotate: -18 }}
+                                            animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
+                                            transition={{ type: "spring", stiffness: 320, damping: 14, delay: 0.55 }}
+                                            style={{
+                                                display: "flex", justifyContent: "center",
+                                                marginBottom: -10,
+                                                filter: "drop-shadow(0 0 10px rgba(251,191,36,0.75))",
+                                            }}
+                                        >
+                                            <BossCrown />
+                                        </motion.div>
+                                    )}
+                                    <div style={{
+                                        width: 72, height: 72, borderRadius: 22, overflow: "hidden",
+                                        boxShadow: `0 0 0 3px ${pal.bg1}88, 0 6px 24px rgba(0,0,0,0.5)`,
+                                    }}>
+                                        <SvgAvatar config={avatarCfg} size={72} />
+                                    </div>
+                                    <span className="font-fredoka text-white text-base leading-none">{w.name}</span>
+                                </div>
+                            );
+                        })}
+                        {heroOverflow > 0 && (
+                            <div className="flex flex-col items-center gap-2 justify-end pb-1">
+                                <div style={{
+                                    width: 72, height: 72, borderRadius: 22,
+                                    background: "rgba(255,255,255,0.08)",
+                                    border: "1.5px solid rgba(255,255,255,0.15)",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                }}>
+                                    <span className="font-fredoka text-white/70 text-xl">+{heroOverflow}</span>
+                                </div>
+                                <span className="font-fredoka text-white/50 text-sm leading-none">more</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {isWinner ? (
-                    <p className="font-nunito text-yellow-400 font-extrabold text-lg mt-1">
-                        You won! 🎉
+                    <p className="font-nunito text-yellow-400 font-extrabold text-lg mt-3">
+                        {isAllTied ? "Everyone wins! 🎉" : isSolo ? "You won! 🎉" : "You tied for first! 🎉"}
                     </p>
                 ) : (
-                    <p className="font-nunito text-white/50 text-base mt-1">
-                        {winner?.name} wins! 🎉
+                    <p className="font-nunito text-white/50 text-base mt-3">
+                        {isAllTied
+                            ? "Everyone wins! 🎉"
+                            : winners.length > 3
+                                ? `${winners.length} players tied for first!`
+                                : isSolo
+                                    ? `${winners[0]?.name} wins! 🎉`
+                                    : `${winners.map(w => w.name).join(" & ")} tied for first!`}
                     </p>
                 )}
             </motion.div>
@@ -102,7 +190,7 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
                 style={{ background: "linear-gradient(to top, #0a0a1a 60%, transparent)" }}
             >
                 {isHost ? (
-                    <button className="btn-primary w-full" onClick={onPlayAgain}>🔄 Play Again!</button>
+                    <button className="btn-primary w-full" onClick={onPlayAgain}>Play Again</button>
                 ) : (
                     <p className="font-nunito text-white/40 text-center animate-pulse text-sm">Waiting for host to play again…</p>
                 )}

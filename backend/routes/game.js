@@ -6,7 +6,7 @@ const { GAME_CATALOGUE } = require("../catalogue");
 const {
   broadcast, startRound, resolveRound,
   checkAllAnswered, checkAllVoted, checkAllMatched,
-  validateBingoClaim,
+  validateBingoClaim, advanceSpyfallTurn,
 } = require("../games/rounds");
 
 const router = Router();
@@ -83,6 +83,7 @@ router.post("/:code/vote", withRoom, (req, res) => {
   const { playerId, targetId } = req.body;
   if (room.phase !== "voting") return res.status(400).json({ ok: false, error: "Not voting phase" });
   if (room.gameType === "guess_the_liar" && playerId === targetId) return res.status(400).json({ ok: false });
+  if (room.gameType === "spyfall" && playerId === targetId) return res.status(400).json({ ok: false, error: "Cannot vote for yourself" });
   if (room.gameType === "two_truths" && playerId === room.spotlightId) return res.status(403).json({ ok: false });
   if (room.gameType === "debate_pit") {
     if (room.debaterIds.includes(playerId)) return res.status(403).json({ ok: false });
@@ -125,6 +126,44 @@ router.post("/:code/round/again", withRoom, hostOnly, (req, res) => {
   room.players.forEach(p => { p.score = 0; });
   room.round = 0; room.usedQuestions = []; room.gameType = null; room.phase = "lobby";
   broadcast(room.code);
+  res.json({ ok: true });
+});
+
+// ── Spyfall ──────────────────────────────────────────────────────────────────
+
+// POST /rooms/:code/spyfall/discuss  — current asker signals their question is done
+router.post("/:code/spyfall/discuss", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId } = req.body;
+  if (room.phase !== "spyfall_discussion") return res.status(400).json({ ok: false, error: "Not in discussion phase" });
+  if (!room.players.find(p => p.id === playerId)) return res.status(403).json({ ok: false, error: "Not in room" });
+  if (room.spyfallAskerId !== playerId) return res.status(403).json({ ok: false, error: "Not your turn to ask" });
+  advanceSpyfallTurn(room);
+  res.json({ ok: true });
+});
+
+// POST /rooms/:code/spyfall/accuse  — host skips remaining discussion turns and opens voting early
+router.post("/:code/spyfall/accuse", withRoom, hostOnly, (req, res) => {
+  const room = req.room;
+  if (room.phase !== "spyfall_discussion") return res.status(400).json({ ok: false, error: "Not in discussion phase" });
+  if (room._spyfallTurnTimer) { clearTimeout(room._spyfallTurnTimer); room._spyfallTurnTimer = null; }
+  room.spyfallAskerId = null;
+  room.spyfallTargetId = null;
+  room.phase = "voting";
+  broadcast(room.code);
+  res.json({ ok: true });
+});
+
+// POST /rooms/:code/spyfall/guess  — spy submits their final location guess
+router.post("/:code/spyfall/guess", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId, guess } = req.body;
+  if (room.phase !== "spyfall_guess") return res.status(400).json({ ok: false, error: "Not in guess phase" });
+  if (!room.players.find(p => p.id === playerId)) return res.status(403).json({ ok: false, error: "Not in room" });
+  if (playerId !== room.spyfallSpyId) return res.status(403).json({ ok: false, error: "Only the spy can guess" });
+  if (!guess || typeof guess !== "string" || !guess.trim()) return res.status(400).json({ ok: false, error: "Guess required" });
+  room.spyfallGuess = guess.trim();
+  resolveRound(room);
   res.json({ ok: true });
 });
 

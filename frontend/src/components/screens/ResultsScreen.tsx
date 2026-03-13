@@ -32,7 +32,8 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
             (gt === "guess_the_liar" && rr.liarCaught) ||
             gt === "roast_room" ||
             gt === "debate_pit" ||
-            gt === "most_likely_to";
+            gt === "most_likely_to" ||
+            (gt === "spyfall" && rr.outcome === "spy_caught_failed");
         if (shouldCelebrate) { fireConfetti(); sfxWin(); }
     }, [gt, rr]);
 
@@ -66,8 +67,13 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         headlineEmoji = cv.length === 0 ? "😈" : "🧐";
         headlineColor = cv.length === 0 ? "border-red-500/40" : "border-purple-500/40";
     } else if (gt === "most_likely_to") {
-        const winners = (rr.winnerIds as string[]) ?? [];
-        headline = winners.map(id => getName(id)).join(" & ") + " won the most votes!";
+        const mltWinners = (rr.winnerIds as string[]) ?? [];
+        const allTied = mltWinners.length >= room.players.length;
+        headline = allTied
+            ? "Everyone is equally likely! 😂"
+            : mltWinners.length > 3
+                ? `${mltWinners.length} players tied for most votes!`
+                : mltWinners.map(id => getName(id)).join(" & ") + " won the most votes!";
         headlineEmoji = "👑";
         headlineColor = "border-amber-500/40";
     } else if (gt === "never_have_i_ever") {
@@ -122,15 +128,26 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
         const rankings = (rr.rankings as { id: string; name: string; ms: number; rank: number }[]) ?? [];
         headline = rankings.length > 0 ? `${rankings[0]?.name ?? "?"} was fastest at ${rankings[0]?.ms ?? 0}ms!` : "No one tapped!";
         headlineEmoji = "⚡"; headlineColor = "border-green-500/40";
-    } else if (gt === "bomberman") {
-        const wn = rr.winnerName as string | null;
-        headline = wn ? `${wn} won the arena! 🏆` : "Everyone got blown up!";
-        headlineEmoji = "💥"; headlineColor = "border-red-500/40";
     } else if (["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"].includes(gt)) {
         const w = (rr.winnerIds as string[]) ?? [];
         const emojis: Record<string, string> = { finish_the_sentence: "✏️", confessions: "🤫", whose_line: "💬", emoji_story: "📖", unhinged_advice: "🤪" };
         headline = w.length > 0 ? w.map(id => getName(id)).join(" & ") + " got the most votes!" : "Everyone tied!";
         headlineEmoji = emojis[gt] ?? "✨"; headlineColor = "border-purple-500/40";
+    } else if (gt === "spyfall") {
+        const outcome = rr.outcome as string;
+        const spyName = getName(rr.spyId as string);
+        if (outcome === "spy_escaped") {
+            headline = `${spyName} escaped undetected! 😈`;
+            headlineEmoji = "😈"; headlineColor = "border-red-500/40";
+            headlineGlow = "shadow-[0_0_36px_rgba(239,68,68,0.28)]";
+        } else if (outcome === "spy_caught_guessed") {
+            headline = `${spyName} guessed the location! 🤯`;
+            headlineEmoji = "📍"; headlineColor = "border-amber-500/40";
+        } else {
+            headline = `${spyName} was caught! 🎉`;
+            headlineEmoji = "🎉"; headlineColor = "border-green-500/40";
+            headlineGlow = "shadow-[0_0_36px_rgba(16,185,129,0.28)]";
+        }
     }
 
     return (
@@ -138,7 +155,6 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
             {/* Round pill */}
             <div className="flex items-center justify-between flex-shrink-0">
                 <div className="round-pill">Round {room.round}/{room.maxRounds}</div>
-                <div className="font-nunito text-white/45 text-xs">{isLastRound ? "Last round!" : "Keep going"}</div>
             </div>
 
             {/* Outcome banner */}
@@ -174,19 +190,46 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                         {room.votes && (
                             <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">🗳️ Votes</p>
                         )}
-                        {room.votes && room.players.map((v, i) => {
-                            if (!room.votes![v.id]) return null;
-                            const correct = room.votes![v.id] === room.liarId;
-                            return (
-                                <motion.div key={v.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 + i * 0.05 }}
-                                    className={`vote-card flex items-center gap-2 ${correct ? "correct" : "wrong"}`}>
-                                    <span className="font-nunito font-bold text-white text-sm">{v.name}</span>
-                                    <span className="text-white/35 text-xs">→</span>
-                                    <span className="font-nunito text-white/80 text-sm">{getName(room.votes![v.id])}</span>
-                                    <span className="ml-auto">{correct ? "✅" : "❌"}</span>
-                                </motion.div>
-                            );
-                        })}
+                        {room.votes && (
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {room.players.map((v, i) => {
+                                    if (!room.votes![v.id]) return null;
+                                    const correct = room.votes![v.id] === room.liarId;
+                                    return (
+                                        <motion.div key={v.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 + i * 0.05 }}
+                                            className={`vote-card flex items-center gap-2 ${correct ? "correct" : "wrong"}`}
+                                            style={{ padding: "10px 12px", minHeight: 0 }}>
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="font-nunito font-bold text-white text-sm truncate">{v.name}</span>
+                                                <span className="font-nunito text-white/50 text-xs truncate">→ {getName(room.votes![v.id])}</span>
+                                            </div>
+                                            <span className="flex-shrink-0">{correct ? "✅" : "❌"}</span>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {/* Points this round */}
+                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">⭐ Points this round</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            {room.players.map((v, i) => {
+                                const isLiar = v.id === room.liarId;
+                                const caught = rr.liarCaught as boolean;
+                                let pts = 0;
+                                if (isLiar && !caught) pts = 200;
+                                else if (!isLiar && room.votes?.[v.id] === room.liarId) pts = 100;
+                                if (pts === 0) return null;
+                                return (
+                                    <motion.div key={v.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 + i * 0.05 }}
+                                        className="vote-card flex items-center gap-2"
+                                        style={{ padding: "10px 12px", minHeight: 0 }}>
+                                        <span className="font-nunito font-bold text-white text-sm truncate flex-1">{v.name}</span>
+                                        <span className="font-fredoka text-amber-400 flex-shrink-0">+{pts}</span>
+                                        <span className="flex-shrink-0">{isLiar ? "😈" : "🔍"}</span>
+                                    </motion.div>
+                                );
+                            })}
+                        </div>
                     </>
                 )}
 
@@ -197,12 +240,11 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                     const lieIdx = (rr.correctIndex as number);
                     return stmts.map((s, i) => (
                         <motion.div key={i} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
-                            className={`answer-card ${i === lieIdx ? "border-red-500/50" : "border-green-500/25"}`}
-                            style={{ borderColor: i === lieIdx ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.25)" }}>
+                            className={`answer-card ${i === lieIdx ? "border-red-500/50" : ""}`}
+                            style={{ borderColor: i === lieIdx ? "rgba(239,68,68,0.5)" : undefined }}>
                             <div className="flex items-center gap-2 mb-1">
                                 <span className="font-nunito font-extrabold text-white/60 text-xs">Statement {i + 1}</span>
                                 {i === lieIdx && <span className="badge" style={{ background: "rgba(239,68,68,0.2)", color: "#F87171", border: "1px solid rgba(239,68,68,0.35)" }}>🤥 THE LIE</span>}
-                                {i !== lieIdx && <span className="badge" style={{ background: "rgba(16,185,129,0.15)", color: "#34D399", border: "1px solid rgba(16,185,129,0.3)" }}>✅ True</span>}
                             </div>
                             <p className="font-nunito text-white/85 text-sm">{s}</p>
                         </motion.div>
@@ -495,20 +537,104 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                     </>
                 )}
 
-                {/* BOMBERMAN details */}
-                {gt === "bomberman" && (
-                    <div className="vote-card flex items-center gap-4">
-                        <span className="text-3xl">💥</span>
-                        <div>
-                            <p className="font-fredoka text-white text-lg">
-                                {(rr.winnerName as string) ? `${rr.winnerName as string} wins!` : "No survivors!"}
-                            </p>
-                            {(rr.winnerName as string) && (
-                                <p className="font-nunito text-white/50 text-xs">+300 pts awarded</p>
+                {/* SPYFALL details */}
+                {gt === "spyfall" && (() => {
+                    const outcome = rr.outcome as string;
+                    const spyId = rr.spyId as string;
+                    const location = rr.location as string;
+                    const guess = rr.guess as string | null;
+                    const guessCorrect = rr.guessCorrect as boolean | undefined;
+                    const voteCounts = rr.voteCounts as Record<string, number> ?? {};
+                    const accusedId = rr.accusedId as string | null;
+                    return (
+                        <>
+                            {/* Location reveal */}
+                            <motion.div
+                                initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", stiffness: 260, damping: 18 }}
+                                className="answer-card text-center py-5"
+                                style={{ borderColor: "rgba(14,165,233,0.45)", boxShadow: "0 0 36px rgba(14,165,233,0.15)" }}
+                            >
+                                <p className="font-nunito text-sky-300/60 text-xs uppercase tracking-widest mb-1">📍 The location was</p>
+                                <p className="font-fredoka text-3xl text-sky-300 mb-1">{location}</p>
+                                <p className="font-nunito text-white/40 text-xs">
+                                    🕵️ Spy: <span className="text-white/70 font-bold">{getName(spyId)}</span>
+                                </p>
+                            </motion.div>
+
+                            {/* Spy guess result (if there was a guess phase) */}
+                            {guess != null && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                                    className={`answer-card flex items-center gap-3 ${
+                                        guessCorrect
+                                            ? "border-amber-500/50"
+                                            : "border-green-500/40"
+                                    }`}
+                                    style={{ borderColor: guessCorrect ? "rgba(245,158,11,0.5)" : "rgba(16,185,129,0.4)" }}
+                                >
+                                    <div className="flex-1">
+                                        <p className="font-nunito text-white/45 text-xs mb-0.5">Spy&apos;s guess</p>
+                                        <p className="font-fredoka text-white text-lg">{guess}</p>
+                                    </div>
+                                    <span className="text-2xl">{guessCorrect ? "🎯" : "❌"}</span>
+                                </motion.div>
                             )}
-                        </div>
-                    </div>
-                )}
+
+                            {/* Vote counts */}
+                            <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">🗳️ Votes</p>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {room.players.map((p, i) => {
+                                    const cnt = voteCounts[p.id] ?? 0;
+                                    const isAccused = p.id === accusedId;
+                                    const isTheSpy = p.id === spyId;
+                                    return (
+                                        <motion.div key={p.id}
+                                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 + i * 0.05 }}
+                                            className={`vote-card flex items-center gap-2 ${
+                                                isAccused ? "selected" : ""
+                                            }`}
+                                            style={{ padding: "10px 12px", minHeight: 0 }}
+                                        >
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="font-nunito font-bold text-white text-sm truncate">{p.name}</span>
+                                                <span className="font-nunito text-white/40 text-xs">
+                                                    {cnt} vote{cnt !== 1 ? "s" : ""}
+                                                    {isTheSpy ? " 🕵️" : ""}
+                                                </span>
+                                            </div>
+                                            {isAccused && <span className="flex-shrink-0 text-sm">{isTheSpy ? "✅" : "❌"}</span>}
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Points this round */}
+                            {rr.pointDeltas && (
+                                <>
+                                    <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">⭐ Points this round</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {room.players.map((p, i) => {
+                                            const delta = (rr.pointDeltas as Record<string, number>)[p.id] ?? 0;
+                                            if (delta === 0) return null;
+                                            return (
+                                                <motion.div key={p.id}
+                                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 + i * 0.05 }}
+                                                    className="vote-card flex items-center gap-2"
+                                                    style={{ padding: "10px 12px", minHeight: 0 }}
+                                                >
+                                                    <span className="font-nunito font-bold text-white text-sm truncate flex-1">{p.name}</span>
+                                                    <span className="font-fredoka text-amber-400 flex-shrink-0">+{delta}</span>
+                                                    {p.id === spyId && <span className="flex-shrink-0">🕵️</span>}
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    );
+                })()}
 
                 {/* CREATIVE ANSWER GAMES: reveal who wrote what + vote counts */}
                 {["finish_the_sentence", "confessions", "whose_line", "emoji_story", "unhinged_advice"].includes(gt) && answers.length > 0 && (
@@ -559,7 +685,7 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                 {isHost ? (
                     <motion.button initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
                         className="btn-primary w-full" onClick={onNext}>
-                        {isLastRound ? "🏆 Final Results!" : "Next Round →"}
+                        {isLastRound ? "Final Results" : "Next Round"}
                     </motion.button>
                 ) : (
                     <p className="font-nunito text-white/35 text-sm text-center wait-pulse">Waiting for host…</p>

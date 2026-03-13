@@ -38,7 +38,8 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
     });
     const [code, setCode] = useState("");
     const [shake, setShake] = useState(false);
-    const [pages, setPages] = useState<Record<string, number>>({ head: 0, eyes: 0, mouth: 0 });
+    const [stripPages, setStripPages] = useState<Record<string, number>>({ head: 0, eyes: 0, mouth: 0 });
+    const stripRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [avatar, setAvatar] = useState<AvatarConfig>(() => {
         try {
             const saved = localStorage.getItem(LS_KEY);
@@ -75,6 +76,22 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
     };
 
     const pal = AVATAR_PALETTES[avatar.color % AVATAR_PALETTES.length];
+    const PAGE_SIZE = 4;
+
+    const scrollToPage = (key: string, pg: number, totalPages: number) => {
+        sfxTap();
+        const el = stripRefs.current[key];
+        if (!el) return;
+        const clamped = Math.max(0, Math.min(totalPages - 1, pg));
+        el.scrollTo({ left: clamped * el.clientWidth, behavior: "smooth" });
+        setStripPages(p => ({ ...p, [key]: clamped }));
+    };
+
+    const handleStripScroll = (key: string, el: HTMLDivElement) => {
+        if (!el.clientWidth) return;
+        const pg = Math.round(el.scrollLeft / el.clientWidth);
+        setStripPages(p => p[key] === pg ? p : { ...p, [key]: pg });
+    };
 
     return (
         <div style={{ position: "relative", width: "100%", minHeight: "100svh" }}>
@@ -331,62 +348,126 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
                                 </div>
 
                                 {/* Feature rows */}
-                                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                                     {FEATURE_ROWS.map(({ key, label, options }) => {
-                                        const page = pages[key] ?? 0;
-                                        const start = page * 4;
+                                        const totalPages = Math.ceil(options.length / PAGE_SIZE);
+                                        const currentPage = stripPages[key as string] ?? 0;
                                         return (
                                             <div key={key}>
+                                                {/* Label + pill-dot indicators */}
                                                 <div style={{
                                                     display: "flex", alignItems: "center",
-                                                    justifyContent: "space-between", marginBottom: 8,
+                                                    justifyContent: "space-between", marginBottom: 10,
                                                 }}>
                                                     <span style={{
                                                         fontFamily: "'Nunito', sans-serif", fontWeight: 800,
                                                         fontSize: "0.7rem", textTransform: "uppercase",
                                                         letterSpacing: "0.12em", color: "rgba(255,255,255,0.42)",
                                                     }}>{label}</span>
-                                                    <div style={{ display: "flex", gap: 5 }}>
-                                                        {[0, 1].map(pg => (
-                                                            <button key={pg}
-                                                                onClick={() => { sfxTap(); setPages(p => ({ ...p, [key]: pg })); }}
+                                                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                                        {Array.from({ length: totalPages }).map((_, i) => (
+                                                            <button key={i}
+                                                                onClick={() => scrollToPage(key as string, i, totalPages)}
                                                                 style={{
-                                                                    width: 26, height: 18, borderRadius: 5,
-                                                                    background: pages[key] === pg ? pal.bg1 : "rgba(255,255,255,0.07)",
+                                                                    width: i === currentPage ? 18 : 6,
+                                                                    height: 6, borderRadius: 3, padding: 0,
+                                                                    background: i === currentPage ? pal.bg1 : "rgba(255,255,255,0.18)",
                                                                     border: "none", cursor: "pointer",
-                                                                    fontSize: 9, color: "white", fontFamily: "'Nunito', sans-serif",
-                                                                    fontWeight: 800, opacity: pages[key] === pg ? 1 : 0.4,
+                                                                    transition: "all 0.22s",
                                                                 }}
-                                                            >{pg + 1}</button>
+                                                            />
                                                         ))}
                                                     </div>
                                                 </div>
-                                                <div style={{ display: "flex", gap: 8 }}>
-                                                    {options.slice(start, start + 4).map((optLabel, i) => {
-                                                        const idx = start + i;
-                                                        const optAvatar: AvatarConfig = { ...avatar, [key]: idx };
-                                                        const isSelected = avatar[key] === idx;
-                                                        return (
-                                                            <button key={idx} onClick={() => setFeature(key, idx)} style={{
-                                                                flex: 1,
-                                                                display: "flex", flexDirection: "column",
-                                                                alignItems: "center", gap: 4,
-                                                                padding: "8px 4px", borderRadius: 14,
-                                                                border: isSelected ? `2px solid ${pal.bg1}aa` : "2px solid rgba(255,255,255,0.07)",
-                                                                background: isSelected ? `${pal.bg1}22` : "rgba(255,255,255,0.04)",
-                                                                cursor: "pointer", transition: "all 0.13s",
-                                                                transform: isSelected ? "scale(1.04)" : "scale(1)",
+                                                {/* Desktop arrows + scrollable strip */}
+                                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                    {/* Left arrow */}
+                                                    <button
+                                                        onClick={() => scrollToPage(key as string, currentPage - 1, totalPages)}
+                                                        style={{
+                                                            width: 28, height: 64, borderRadius: 10, flexShrink: 0,
+                                                            border: "1px solid rgba(255,255,255,0.10)",
+                                                            background: "rgba(255,255,255,0.04)", color: "white",
+                                                            fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center",
+                                                            cursor: currentPage === 0 ? "default" : "pointer",
+                                                            opacity: currentPage === 0 ? 0.18 : 0.65,
+                                                            transition: "opacity 0.2s", userSelect: "none",
+                                                        }}
+                                                    >‹</button>
+                                                    {/* Scroll-snap strip (swipe on mobile, arrow on desktop) */}
+                                                    <div
+                                                        ref={el => { stripRefs.current[key as string] = el; }}
+                                                        onScroll={e => handleStripScroll(key as string, e.currentTarget)}
+                                                        className="avatar-strip"
+                                                        style={{
+                                                            flex: 1, display: "flex",
+                                                            overflowX: "auto", overflowY: "hidden",
+                                                            scrollSnapType: "x mandatory",
+                                                        }}
+                                                    >
+                                                        {Array.from({ length: totalPages }).map((_, pageIdx) => (
+                                                            <div key={pageIdx} style={{
+                                                                display: "flex", gap: 8,
+                                                                flex: "0 0 100%", scrollSnapAlign: "start",
                                                             }}>
-                                                                <div style={{ width: 36, height: 36, borderRadius: 10, overflow: "hidden" }}>
-                                                                    <SvgAvatar config={optAvatar} size={36} />
-                                                                </div>
-                                                                <span style={{
-                                                                    fontFamily: "'Nunito', sans-serif", fontSize: 9,
-                                                                    color: isSelected ? "white" : "rgba(255,255,255,0.34)", fontWeight: 700,
-                                                                }}>{optLabel.split(" ")[0]}</span>
-                                                            </button>
-                                                        );
-                                                    })}
+                                                                {options.slice(pageIdx * PAGE_SIZE, (pageIdx + 1) * PAGE_SIZE).map((optLabel, i) => {
+                                                                    const idx = pageIdx * PAGE_SIZE + i;
+                                                                    const optAvatar: AvatarConfig = { ...avatar, [key]: idx };
+                                                                    const isSelected = avatar[key] === idx;
+                                                                    return (
+                                                                        <button key={idx}
+                                                                            onClick={() => setFeature(key, idx)}
+                                                                            style={{
+                                                                                flex: 1,
+                                                                                display: "flex", flexDirection: "column",
+                                                                                alignItems: "center", gap: 5,
+                                                                                padding: "10px 3px 8px", borderRadius: 16,
+                                                                                border: isSelected
+                                                                                    ? `2px solid ${pal.bg1}`
+                                                                                    : "2px solid rgba(255,255,255,0.08)",
+                                                                                background: isSelected
+                                                                                    ? `${pal.bg1}28`
+                                                                                    : "rgba(255,255,255,0.04)",
+                                                                                cursor: "pointer",
+                                                                                transition: "all 0.14s",
+                                                                                transform: isSelected ? "scale(1.07)" : "scale(1)",
+                                                                                boxShadow: isSelected ? `0 0 16px ${pal.bg1}50` : "none",
+                                                                            }}>
+                                                                            <div style={{ width: 40, height: 40, borderRadius: 12, overflow: "hidden" }}>
+                                                                                <SvgAvatar config={optAvatar} size={40} />
+                                                                            </div>
+                                                                            <span style={{
+                                                                                fontFamily: "'Nunito', sans-serif", fontSize: 9,
+                                                                                color: isSelected ? "white" : "rgba(255,255,255,0.34)",
+                                                                                fontWeight: 800, lineHeight: 1,
+                                                                            }}>{optLabel.split(" ")[0]}</span>
+                                                                            {isSelected && (
+                                                                                <div style={{
+                                                                                    width: 5, height: 5, borderRadius: "50%",
+                                                                                    background: pal.bg1,
+                                                                                    boxShadow: `0 0 6px ${pal.bg1}`,
+                                                                                    marginTop: -2,
+                                                                                }} />
+                                                                            )}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    {/* Right arrow */}
+                                                    <button
+                                                        onClick={() => scrollToPage(key as string, currentPage + 1, totalPages)}
+                                                        style={{
+                                                            width: 28, height: 64, borderRadius: 10, flexShrink: 0,
+                                                            border: "1px solid rgba(255,255,255,0.10)",
+                                                            background: "rgba(255,255,255,0.04)", color: "white",
+                                                            fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center",
+                                                            cursor: currentPage === totalPages - 1 ? "default" : "pointer",
+                                                            opacity: currentPage === totalPages - 1 ? 0.18 : 0.65,
+                                                            transition: "opacity 0.2s", userSelect: "none",
+                                                        }}
+                                                    >›</button>
                                                 </div>
                                             </div>
                                         );

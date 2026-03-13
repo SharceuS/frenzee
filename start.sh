@@ -13,7 +13,7 @@ sleep 2
 # Start backend
 echo "🚀 Starting backend on :4000 ..."
 cd "$ROOT/backend"
-node server.js &
+node index.js &
 BACKEND_PID=$!
 
 sleep 1

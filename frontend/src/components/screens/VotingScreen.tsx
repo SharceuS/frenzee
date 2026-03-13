@@ -11,6 +11,7 @@ interface Props {
 
 const VOTE_CONFIGS: Record<string, { emoji: string; title: string; subtitle: string; btnLabel: string }> = {
     guess_the_liar: { emoji: "🕵️", title: "Spot the Liar!", subtitle: "Who wrote the fake answer?", btnLabel: "Vote" },
+    spyfall: { emoji: "🔍", title: "Who is the Spy?", subtitle: "Vote for the most suspicious player", btnLabel: "Vote" },
     two_truths: { emoji: "✌️", title: "Which is the Lie?", subtitle: "Spot the fake statement", btnLabel: "That's the Lie" },
     roast_room: { emoji: "🎭", title: "Vote the Funniest!", subtitle: "Which roast cracked you up?", btnLabel: "Vote Funniest" },
     debate_pit: { emoji: "⚔️", title: "Vote the Winner!", subtitle: "Who argued better?", btnLabel: "Vote" },
@@ -123,6 +124,30 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                     </div>
                                 </motion.button>
                             ))}
+                        </>
+                    )}
+
+                    {/* SPYFALL: vote for a player by name */}
+                    {gt === "spyfall" && (
+                        <>
+                            <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">🔍 Pick your suspect</p>
+                            {room.players
+                                .filter(p => p.id !== myId)
+                                .map((p, i) => (
+                                    <motion.button key={p.id}
+                                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.07 }}
+                                        onClick={() => handle(p.id)}
+                                        disabled={hasVoted}
+                                        className={`vote-card w-full text-left ${
+                                            voted === p.id ? "selected" : ""
+                                        } ${hasVoted && voted !== p.id ? "opacity-40" : ""}`}>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
+                                            {voted === p.id && <span className="font-nunito text-purple-300 text-xs">Your pick ✓</span>}
+                                        </div>
+                                    </motion.button>
+                                ))}
                         </>
                     )}
 

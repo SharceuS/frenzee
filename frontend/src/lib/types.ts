@@ -38,7 +38,12 @@ export type Phase =
   | "word_bomb"
   | "reaction"
   | "bomberman"
-  | "bingo_live";
+  | "bingo_live"
+  // Spyfall phases
+  | "spyfall_discussion"
+  | "spyfall_guess"
+  // Terminal state
+  | "disbanded";
 
 export interface Player {
   id: string;
@@ -85,6 +90,7 @@ export interface Room {
   answerCount: number;
   voteCount: number;
   roundResult: Record<string, unknown> | null;
+  disbandReason: "host_left" | "not_enough_players" | null;
   // Trivia Blitz
   triviaStartTime: number | null;
   // Draw It
@@ -120,4 +126,22 @@ export interface Room {
   bingoCards: Record<string, number[]> | null;
   bingoCalledItems: number[];
   bingoWinners: { id: string; name: string; pattern: string }[];
+  // Spyfall
+  spyfallTurns: { askerId: string; targetId: string }[] | null;
+  spyfallTurnIndex: number | null;
+  spyfallAskerId: string | null;
+  spyfallTargetId: string | null;
+  spyfallAccusedId: string | null;
+  spyfallSpyId: string | null;
+  spyfallLocation: string | null;
+  spyfallGuess: string | null;
+  spyfallLocationNames: string[] | null;
+}
+
+// ── Spyfall ───────────────────────────────────────
+export interface SpyfallRole {
+  role: "spy" | "villager";
+  location?: string;
+  roleCard?: string;
+  locationNames?: string[];
 }

@@ -20,6 +20,7 @@ const SSE_EVENTS = [
   "word_bomb_new_pattern",
   "bomber_grid",
   "bomber_state",
+  "your_spyfall_role",
   "error_msg",
 ] as const;
 
