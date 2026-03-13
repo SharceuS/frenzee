@@ -1,13 +1,14 @@
-// ── Frenzee Backend — SSE + HTTP architecture ─────────────────────────────────
+// ── Frenzee Backend — SSE + HTTP + Bomb Arena WebSocket ───────────────────────
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 
-const { GAME_CATALOGUE } = require("./catalogue");
+const { getActiveCatalogue } = require("./catalogue");
 const streamRouter = require("./routes/stream");
 const roomsRouter  = require("./routes/rooms");
 const gameRouter   = require("./routes/game");
 const arcadeRouter = require("./routes/arcade");
+const { handleBomberUpgrade } = require("./games/bomberWs");
 
 const app = express();
 app.use(cors({ origin: "*" }));
@@ -15,7 +16,8 @@ app.use(express.json());
 
 // ── Health / Catalogue ────────────────────────────────────────────────────────
 app.get("/health",    (_, res) => res.json({ ok: true }));
-app.get("/catalogue", (_, res) => res.json(GAME_CATALOGUE));
+// Returns only active games; retired entries are excluded.
+app.get("/catalogue", (_, res) => res.json(getActiveCatalogue()));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/stream", streamRouter);   // GET  /stream/:code?playerId=xxx
@@ -26,4 +28,8 @@ app.use("/rooms",  arcadeRouter);   // POST /rooms/:code/draw/*|wordbomb|reactio
 // ── Start server ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
-server.listen(PORT, () => console.log(`🚀 Frenzee backend :${PORT}  (SSE + HTTP)`));
+
+// Bomb Arena WebSocket upgrade — all other routes stay on SSE + HTTP.
+handleBomberUpgrade(server);
+
+server.listen(PORT, () => console.log(`🚀 Frenzee backend :${PORT}  (SSE + HTTP + Bomb Arena WS)`));

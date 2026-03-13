@@ -2,8 +2,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Room } from "@/lib/types";
-import { useSse } from "@/lib/sse";
-import { apiBombermanInput, apiBombermanPing } from "@/lib/api";
+import { useBomberRealtime, BomberRealtimeState } from "@/lib/bomberRealtime";
 
 // ── Constants (must mirror server) ───────────────────────────────────────────
 const BOMBER_COLS = 15;
@@ -14,20 +13,7 @@ const BOMBER_BOMB_MS = 2000; // must match server BOMBER_BOMB_MS
 
 interface Props { room: Room; myId: string; }
 
-// ── Shape of the lightweight bomber_state event ───────────────────────────────
-interface BomberPlayer {
-    id: string;
-    fromR: number | null; fromC: number | null;
-    toR: number | null;   toC: number | null;
-    progress: number; speedMult: number; alive: boolean;
-}
-interface BomberState {
-    players: BomberPlayer[];
-    bombs: { r: number; c: number; timer: number; ownerId: string; range: number }[];
-    explosions: { tiles: { r: number; c: number }[]; centerR: number; centerC: number; expiresAt: number }[];
-    powerups: { r: number; c: number; type: "range" | "speed" }[];
-    gameOver: boolean;
-}
+
 
 // ── Tile-level collision (mirrors server bomberTileBlocked) ───────────────────
 function isTileBlocked(
@@ -52,7 +38,6 @@ function getDir(dirs: Set<string>): [number, number] {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function BombermanScreen({ room, myId }: Props) {
-    const { on, off } = useSse();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const codeRef = useRef(room.code);
@@ -61,75 +46,51 @@ export default function BombermanScreen({ room, myId }: Props) {
     const lastTimeRef = useRef<number>(0);
     const sendTsRef = useRef<number>(0);
     const bombQueueRef = useRef(false);
-    const latencyRef = useRef<number>(0);
     const localPassBombRef = useRef<string | null>(null);
-    const gridCacheRef = useRef<number[][] | null>(null);
-    const bomberStateRef = useRef<BomberState>({
-        players: [], bombs: [], explosions: [], powerups: [], gameOver: false,
-    });
     const localGridRef = useRef<{ fromR: number; fromC: number; toR: number; toC: number; progress: number } | null>(null);
 
-    // Keep code ref in sync
-    useEffect(() => { codeRef.current = room.code; }, [room.code]);
-
-    // ── Subscribe to dedicated lightweight Bomberman events ───────────────────
-    useEffect(() => {
-        const onGrid = (grid: number[][]) => {
-            gridCacheRef.current = grid;
-        };
-
-        const onState = (state: BomberState) => {
-            bomberStateRef.current = state;
-            // Reconcile my player's grid prediction
-            const me = state.players.find(p => p.id === myId);
-            if (me && me.fromR != null && me.toR != null) {
-                if (localGridRef.current === null) {
-                    localGridRef.current = {
-                        fromR: me.fromR, fromC: me.fromC!,
-                        toR: me.toR, toC: me.toC!,
-                        progress: me.progress,
-                    };
-                } else {
-                    const lg = localGridRef.current;
-                    if (me.fromR !== lg.fromR || me.fromC !== lg.fromC ||
-                        me.toR !== lg.toR || me.toC !== lg.toC) {
+    // ── Dedicated Bomb Arena transport (SSE, ping, input) ─────────────────────
+    const { gridRef: gridCacheRef, stateRef: bomberStateRef, latencyRef, sendInput: sendBomberInput } = useBomberRealtime(
+        room.code,
+        myId,
+        {
+            onState: (state) => {
+                // Server reconciliation: correct localGridRef when server position diverges
+                const me = state.players.find(p => p.id === myId);
+                if (me && me.fromR != null && me.toR != null) {
+                    if (localGridRef.current === null) {
                         localGridRef.current = {
                             fromR: me.fromR, fromC: me.fromC!,
                             toR: me.toR, toC: me.toC!,
                             progress: me.progress,
                         };
+                    } else {
+                        const lg = localGridRef.current;
+                        if (me.fromR !== lg.fromR || me.fromC !== lg.fromC ||
+                            me.toR !== lg.toR || me.toC !== lg.toC) {
+                            localGridRef.current = {
+                                fromR: me.fromR, fromC: me.fromC!,
+                                toR: me.toR, toC: me.toC!,
+                                progress: me.progress,
+                            };
+                        }
                     }
                 }
-            }
-        };
+            },
+        }
+    );
 
-        on("bomber_grid", onGrid);
-        on("bomber_state", onState);
-        return () => {
-            off("bomber_grid", onGrid);
-            off("bomber_state", onState);
-        };
-    }, [on, off, myId]);
+    // Keep code ref in sync
+    useEffect(() => { codeRef.current = room.code; }, [room.code]);
 
-    // ── Latency ping via HTTP ─────────────────────────────────────────────
-    useEffect(() => {
-        const ping = async () => {
-            const t0 = Date.now();
-            const res = await apiBombermanPing(room.code, t0).catch(() => null);
-            if (res) latencyRef.current = Date.now() - t0;
-        };
-        ping();
-        const iv = setInterval(ping, 1000);
-        return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
-    // ── Flush current input to server ────────────────────────────────────────
+
+    // ── Flush current input to server via dedicated transport ─────────────────
     const flushInput = useCallback((bomb = false) => {
         const [ndr, ndc] = getDir(dirsRef.current);
-        apiBombermanInput(codeRef.current, myId, ndc, ndr, bomb);
+        sendBomberInput(ndc, ndr, bomb);
         bombQueueRef.current = false;
-    }, [myId]);
+    }, [sendBomberInput]);
 
     // ── Keyboard ─────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -356,7 +317,7 @@ export default function BombermanScreen({ room, myId }: Props) {
 function drawBomberman(
     ctx: CanvasRenderingContext2D,
     T: number,
-    state: BomberState,
+    state: BomberRealtimeState,
     myId: string,
     localGrid: { fromR: number; fromC: number; toR: number; toC: number; progress: number } | null,
     latencyMs: number,

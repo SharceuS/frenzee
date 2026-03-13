@@ -7,7 +7,7 @@ const {
   DEBATE_PIT_TOPICS, WORD_ASSOCIATION, EMOJI_STORIES, FINISH_THE_SENTENCE,
   THIS_OR_THAT, UNHINGED_ADVICE, CONFESSIONS_PROMPTS, SPEED_ROUND,
   PICK_YOUR_POISON, BURN_OR_BUILD, RATE_THAT_TAKE, SUPERLATIVES, WHOSE_LINE_PROMPTS,
-  TRIVIA_BLITZ, DRAW_IT_WORDS, WORD_BOMB_PATTERNS,
+  TRIVIA_BLITZ, DRAW_IT_WORDS, WORD_BOMB_PATTERNS, BINGO_ITEMS,
 } = require("../data/questions");
 const { startBombermanGame } = require("./bomberman");
 
@@ -240,7 +240,91 @@ function startRound(room) {
     }, delay);
   } else if (gt === "bomberman") {
     startBombermanGame(room, broadcast);
+  } else if (gt === "bingo") {
+    // Assign a unique shuffled 5×5 card to every player.
+    // Card is stored as 25 item-indices from BINGO_ITEMS.
+    // Position 12 is always FREE (index -1 sentinel).
+    room.bingoCards = {};
+    room.bingoCalledItems = [];
+    room.bingoWinners = [];
+    room._bingoCallTimer = null;
+    const BINGO_SIZE = 25;
+    const FREE_SLOT = 12; // center of 5×5
+    room.players.forEach(p => {
+      const pool = Array.from({ length: BINGO_ITEMS.length }, (_, i) => i);
+      const picked = shuffle(pool).slice(0, BINGO_SIZE - 1); // 24 unique items
+      const card = [];
+      for (let i = 0; i < BINGO_SIZE; i++) {
+        card.push(i === FREE_SLOT ? -1 : picked[i < FREE_SLOT ? i : i - 1]);
+      }
+      room.bingoCards[p.id] = card;
+    });
+    room.phase = "question"; broadcast(room.code);
+    // Brief rules intro, then start calling items.
+    setTimeout(() => {
+      if (!getRoom(room.code)) return;
+      room.phase = "bingo_live"; broadcast(room.code);
+      scheduleBingoCall(room);
+    }, 5000);
   }
+}
+
+// ── Bingo helpers ─────────────────────────────────────────────────────────────
+
+const BINGO_CALL_INTERVAL = 8000; // ms between called items
+const BINGO_SIZE = 5;
+const FREE_SLOT = 12;
+
+/**
+ * Schedule the next item call for the active Bingo round.
+ * Stops if the room is gone, phase changed, or all items have been called.
+ */
+function scheduleBingoCall(room) {
+  if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
+  room._bingoCallTimer = setTimeout(() => {
+    const r = getRoom(room.code);
+    if (!r || r.phase !== "bingo_live") return;
+    const called = new Set(r.bingoCalledItems);
+    // Build pool of uncalled item indices that appear on at least one card.
+    const onACard = new Set();
+    Object.values(r.bingoCards).forEach(card => card.forEach(idx => { if (idx !== -1) onACard.add(idx); }));
+    const remaining = [...onACard].filter(i => !called.has(i));
+    if (remaining.length === 0) {
+      // All items called — resolve with whoever has bingo, or no winner.
+      resolveRound(r);
+      return;
+    }
+    const next = remaining[Math.floor(Math.random() * remaining.length)];
+    r.bingoCalledItems.push(next);
+    broadcast(r.code);
+    // If nobody has bingo yet keep calling.
+    if (r.bingoWinners.length === 0) scheduleBingoCall(r);
+  }, BINGO_CALL_INTERVAL);
+}
+
+/**
+ * Validate a bingo claim for a player.
+ * Returns { valid: boolean, pattern: string|null }.
+ * pattern is one of: 'row0'–'row4', 'col0'–'col4', 'diag_main', 'diag_anti'.
+ */
+function validateBingoClaim(card, calledSet) {
+  // card[i] is -1 for FREE, otherwise an item index.
+  function marked(pos) {
+    return card[pos] === -1 || calledSet.has(card[pos]);
+  }
+  // Rows
+  for (let r = 0; r < BINGO_SIZE; r++) {
+    if ([0,1,2,3,4].every(c => marked(r * BINGO_SIZE + c))) return { valid: true, pattern: `row${r}` };
+  }
+  // Columns
+  for (let c = 0; c < BINGO_SIZE; c++) {
+    if ([0,1,2,3,4].every(r => marked(r * BINGO_SIZE + c))) return { valid: true, pattern: `col${c}` };
+  }
+  // Main diagonal (top-left → bottom-right)
+  if ([0,6,12,18,24].every(pos => marked(pos))) return { valid: true, pattern: "diag_main" };
+  // Anti-diagonal (top-right → bottom-left)
+  if ([4,8,12,16,20].every(pos => marked(pos))) return { valid: true, pattern: "diag_anti" };
+  return { valid: false, pattern: null };
 }
 
 // ── Resolve Round ─────────────────────────────────────────────────────────────
@@ -421,6 +505,20 @@ function resolveRound(room) {
     }
     sorted.forEach(([id, ms]) => { const p = room.players.find(x => x.id === id); if (p) p.score += reactionPts(ms); });
     result = { rankings: sorted.map(([id, ms], rank) => ({ id, ms, rank: rank + 1, name: room.players.find(x => x.id === id)?.name ?? id })) };
+  } else if (gt === "bingo") {
+    if (room._bingoCallTimer) { clearTimeout(room._bingoCallTimer); room._bingoCallTimer = null; }
+    const winners = room.bingoWinners || [];
+    // Award points: first winner 250, tied winners (same resolution window) 150.
+    winners.forEach((w, i) => {
+      const p = room.players.find(x => x.id === w.id);
+      if (p) p.score += i === 0 ? 250 : 150;
+    });
+    result = {
+      winnerIds: winners.map(w => w.id),
+      winners,
+      calledItems: room.bingoCalledItems,
+      calledLabels: (room.bingoCalledItems || []).map(i => BINGO_ITEMS[i]),
+    };
   }
 
   room.roundResult = result;
@@ -444,6 +542,7 @@ function handleDisconnect(code, playerId) {
     if (room._reactionTimer) clearTimeout(room._reactionTimer);
     if (room._bomberLoop) clearInterval(room._bomberLoop);
     if (room._bomberMaxTimer) clearTimeout(room._bomberMaxTimer);
+    if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
     const { deleteRoom } = require("../store");
     deleteRoom(code);
     return;
@@ -471,4 +570,5 @@ module.exports = {
   broadcast, startRound, resolveRound, handleDisconnect,
   checkAllAnswered, checkAllVoted, checkAllMatched,
   getNextAliveBombPlayer, startBombTimer,
+  validateBingoClaim, scheduleBingoCall,
 };

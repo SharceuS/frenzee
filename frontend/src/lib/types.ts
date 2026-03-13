@@ -7,7 +7,7 @@ export interface AvatarConfig {
 }
 
 // ── Misc ─────────────────────────────────────────
-export type GameCategory = "popular" | "original" | "arcade";
+export type GameCategory = "social" | "opinion" | "creative" | "wordplay" | "arcade";
 
 export interface GameInfo {
   id: string;
@@ -37,7 +37,8 @@ export type Phase =
   | "drawing"
   | "word_bomb"
   | "reaction"
-  | "bomberman";
+  | "bomberman"
+  | "bingo_live";
 
 export interface Player {
   id: string;
@@ -115,4 +116,8 @@ export interface Room {
   }[];
   bomberPowerups: { r: number; c: number; type: "range" | "speed" }[];
   bomberGameOver: boolean;
+  // Bingo
+  bingoCards: Record<string, number[]> | null;
+  bingoCalledItems: number[];
+  bingoWinners: { id: string; name: string; pattern: string }[];
 }

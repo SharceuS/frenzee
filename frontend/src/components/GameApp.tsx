@@ -26,6 +26,7 @@ import DrawItScreen from "./screens/DrawItScreen";
 import WordBombScreen from "./screens/WordBombScreen";
 import ReactionTapScreen from "./screens/ReactionTapScreen";
 import BombermanScreen from "./screens/BombermanScreen";
+import BingoScreen from "./screens/BingoScreen";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -78,6 +79,7 @@ export default function GameApp() {
             wordBombActiveId: null, wordBombPattern: null, wordBombLives: {}, wordBombMinFuse: 8,
             wordBombUsedWords: [], reactionFired: false, reactionTimes: {},
             bomberGrid: null, bomberBombs: [], bomberExplosions: [], bomberPowerups: [], bomberGameOver: false,
+            bingoCards: null, bingoCalledItems: [], bingoWinners: [],
         } as Room);
 
         const res = await apiCreateRoom(name, avatar);
@@ -142,7 +144,7 @@ export default function GameApp() {
         ? "lobby"
         : `${phase}-${room?.gameType ?? ""}-${room?.round ?? 0}`;
     const gt = room?.gameType ?? "";
-    const binaryAnswerGames = ["never_have_i_ever", "would_you_rather", "hot_takes", "red_flag_radar", "this_or_that", "pick_your_poison", "burn_or_build", "speed_round", "rate_that_take"];
+    const binaryAnswerGames = ["never_have_i_ever", "would_you_rather", "hot_takes", "pick_your_poison"];
 
     return (
         <div className="relative" style={{ isolation: "isolate" }}>
@@ -218,6 +220,10 @@ export default function GameApp() {
 
                     {phase === "bomberman" && room && (
                         <BombermanScreen room={room} myId={myId} />
+                    )}
+
+                    {phase === "bingo_live" && room && (
+                        <BingoScreen room={room} myId={myId} />
                     )}
 
                     {phase === "results" && room && (

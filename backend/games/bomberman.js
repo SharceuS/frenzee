@@ -1,6 +1,7 @@
 // ── Bomberman Engine ──────────────────────────────────────────────────────────
 const { getRoom } = require("../store");
 const { sseBroadcast, sseSend } = require("../sse");
+const { bomberWsBroadcast, cleanupBomberWsRoom } = require("./bomberWs");
 
 const BOMBER_COLS = 15;
 const BOMBER_ROWS = 13;
@@ -94,7 +95,10 @@ function detonateBomberBomb(room, bomb) {
 }
 
 function broadcastBomberState(room) {
+  // Increment the sequence counter so clients can detect dropped snapshots.
+  room.bomberSeq = (room.bomberSeq ?? 0) + 1;
   const payload = {
+    seq: room.bomberSeq,
     players: room.players.map(p => ({
       id: p.id,
       fromR: p.bomberFromR ?? null, fromC: p.bomberFromC ?? null,
@@ -108,6 +112,9 @@ function broadcastBomberState(room) {
     powerups: room.bomberPowerups,
     gameOver: room.bomberGameOver,
   };
+  // Primary: WebSocket for low-latency delivery.
+  bomberWsBroadcast(room.code, "bomber_state", payload);
+  // Fallback: SSE for clients that have not yet upgraded to the WS transport.
   sseBroadcast(room.code, "bomber_state", payload);
 }
 
@@ -115,6 +122,9 @@ function endBombermanRound(room, winnerId) {
   room.bomberGameOver = true;
   if (room._bomberLoop) { clearInterval(room._bomberLoop); room._bomberLoop = null; }
   if (room._bomberMaxTimer) { clearTimeout(room._bomberMaxTimer); room._bomberMaxTimer = null; }
+  // Close all Bomb Arena WS connections after a short delay so clients
+  // can receive the final bomber_state (gameOver: true) before teardown.
+  setTimeout(() => cleanupBomberWsRoom(room.code), 5000);
 
   const { broadcast } = require("./rounds");
   const winner = room.players.find(p => p.id === winnerId);
@@ -226,6 +236,7 @@ function tickBomberman(room) {
   } else {
     if (room.bomberGridDirty) {
       room.bomberGridDirty = false;
+      bomberWsBroadcast(room.code, "bomber_grid", room.bomberGrid);
       sseBroadcast(room.code, "bomber_grid", room.bomberGrid);
     }
     if (dirty) broadcastBomberState(room);
@@ -252,6 +263,7 @@ function startBombermanGame(room, broadcastFn) {
   });
   room.phase = "bomberman";
   broadcastFn(room.code); // phase change so clients mount BombermanScreen
+  bomberWsBroadcast(room.code, "bomber_grid", room.bomberGrid);
   sseBroadcast(room.code, "bomber_grid", room.bomberGrid);
   broadcastBomberState(room);
   room._bomberLoop = setInterval(() => tickBomberman(room), BOMBER_TICK);

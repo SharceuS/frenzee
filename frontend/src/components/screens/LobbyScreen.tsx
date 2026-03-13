@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Room } from "@/lib/types";
 import GameInfoModal from "@/components/GameInfoModal";
@@ -14,17 +14,19 @@ interface Props {
     onStart: (maxRounds: number) => void;
 }
 
-const CAT_META = {
-    popular: { icon: "⭐", label: "Popular" },
-    original: { icon: "✨", label: "Original" },
-    arcade: { icon: "🎮", label: "Arcade" },
-} as const;
+const CAT_PILLS: Record<string, { label: string; color: string }> = {
+    social:   { label: "Social",   color: "#7C3AED" },
+    opinion:  { label: "Opinion",  color: "#EF4444" },
+    creative: { label: "Creative", color: "#F97316" },
+    wordplay: { label: "Wordplay", color: "#10B981" },
+    arcade:   { label: "Arcade",   color: "#3B82F6" },
+};
 
 const ALL_GAMES = [
-    // ─── Popular ───
+    // ─── Social & Bluffing ───
     {
-        id: "guess_the_liar", emoji: "🕵️", title: "Guess the Liar", desc: "Catch the liar!",
-        color: "#7C3AED", cat: "popular",
+        id: "guess_the_liar", emoji: "🕵️", title: "Find the Liar", desc: "Catch the liar!",
+        color: "#7C3AED", cat: "social",
         rules: [
             "Everyone gets a question. One player secretly becomes the Liar.",
             "The Liar must answer without knowing the question — they make it up!",
@@ -36,7 +38,7 @@ const ALL_GAMES = [
     },
     {
         id: "two_truths", emoji: "✌️", title: "Two Truths & a Lie", desc: "Spot the lie",
-        color: "#EC4899", cat: "popular",
+        color: "#EC4899", cat: "social",
         rules: [
             "One player (spotlight) writes 2 truths and 1 lie about themselves.",
             "Mark which statement is the lie — others won't know.",
@@ -48,7 +50,7 @@ const ALL_GAMES = [
     },
     {
         id: "most_likely_to", emoji: "🏆", title: "Most Likely To", desc: "Vote the group",
-        color: "#F59E0B", cat: "popular",
+        color: "#F59E0B", cat: "social",
         rules: [
             "A wild scenario is shown to the whole group.",
             "Everyone votes for who in the group is most likely to do it.",
@@ -60,7 +62,7 @@ const ALL_GAMES = [
     },
     {
         id: "never_have_i_ever", emoji: "🙅", title: "Never Have I Ever", desc: "Have or never?",
-        color: "#10B981", cat: "popular",
+        color: "#10B981", cat: "opinion",
         rules: [
             "A statement appears — Never have I ever…",
             "Tap HAVE if you've done it, NEVER if you haven't.",
@@ -71,8 +73,8 @@ const ALL_GAMES = [
         minPlayers: 2, maxPlayers: 12, duration: "1 min",
     },
     {
-        id: "would_you_rather", emoji: "🤔", title: "Would You Rather", desc: "A or B?",
-        color: "#3B82F6", cat: "popular",
+        id: "would_you_rather", emoji: "🤔", title: "Would You Rather?", desc: "A or B?",
+        color: "#3B82F6", cat: "opinion",
         rules: [
             "Two options appear — both equally terrible (or great).",
             "Tap A or B. No overthinking!",
@@ -84,7 +86,7 @@ const ALL_GAMES = [
     },
     {
         id: "hot_takes", emoji: "🔥", title: "Hot Takes", desc: "Minority wins",
-        color: "#EF4444", cat: "popular",
+        color: "#EF4444", cat: "opinion",
         rules: [
             "A spicy opinion is shown. Agree or disagree — simple.",
             "The group sees how everyone voted after.",
@@ -95,8 +97,8 @@ const ALL_GAMES = [
         minPlayers: 2, maxPlayers: 12, duration: "1 min",
     },
     {
-        id: "roast_room", emoji: "🎭", title: "Roast Room", desc: "Funniest answer",
-        color: "#F97316", cat: "popular",
+        id: "roast_room", emoji: "🎭", title: "Roast Battle", desc: "Funniest answer wins",
+        color: "#F97316", cat: "creative",
         rules: [
             "A prompt appears — write the funniest answer you can.",
             "All answers shown anonymously — vote for the best one.",
@@ -108,7 +110,7 @@ const ALL_GAMES = [
     },
     {
         id: "finish_the_sentence", emoji: "✏️", title: "Finish the Sentence", desc: "Get creative",
-        color: "#8B5CF6", cat: "popular",
+        color: "#8B5CF6", cat: "creative",
         rules: [
             "A sentence starter appears — you finish it.",
             "Be funny, creative, or brutally honest.",
@@ -118,46 +120,10 @@ const ALL_GAMES = [
         scoring: "Most votes for your ending → +150 pts.",
         minPlayers: 2, maxPlayers: 12, duration: "3–4 min",
     },
-    {
-        id: "this_or_that", emoji: "⚡", title: "This or That", desc: "Rapid fire A vs B",
-        color: "#06B6D4", cat: "popular",
-        rules: [
-            "Two options flash on screen — pick instantly!",
-            "No thinking. Go with your gut.",
-            "See how you compare to the rest of the group.",
-            "The more you match the minority, the more you score.",
-        ],
-        scoring: "Being in the minority option → +50 pts per round.",
-        minPlayers: 2, maxPlayers: 12, duration: "1 min",
-    },
-    {
-        id: "superlatives", emoji: "🏅", title: "Superlatives", desc: "Vote who fits",
-        color: "#F59E0B", cat: "popular",
-        rules: [
-            "A superlative appears — like 'Most likely to accidentally start a cult'.",
-            "Everyone votes for who in the group fits best.",
-            "Player with the most votes wins the superlative (and points)!",
-            "Find out what your friends think of you.",
-        ],
-        scoring: "Most votes for a superlative → +50 pts.",
-        minPlayers: 3, maxPlayers: 12, duration: "1–2 min",
-    },
-    // ─── Original ───
-    {
-        id: "red_flag_radar", emoji: "🚩", title: "Red Flag Radar", desc: "Red or green?",
-        color: "#DC2626", cat: "original",
-        rules: [
-            "A dating/life scenario pops up.",
-            "Vote RED FLAG 🚩 or GREEN FLAG 🟢 — no middle ground.",
-            "Results revealed — see who in the group has standards.",
-            "Minority flag-pickers earn bonus points.",
-        ],
-        scoring: "Minority flag vote → +50 pts. Groups can debate after each result!",
-        minPlayers: 2, maxPlayers: 12, duration: "1 min",
-    },
+    // ─── Creative (continued) ───
     {
         id: "vibe_check", emoji: "✨", title: "Vibe Check", desc: "Match the vibes",
-        color: "#8B5CF6", cat: "original",
+        color: "#8B5CF6", cat: "creative",
         rules: [
             "Everyone describes themselves using a theme (e.g. 'as a pizza topping').",
             "Answers are shown anonymously.",
@@ -168,8 +134,8 @@ const ALL_GAMES = [
         minPlayers: 3, maxPlayers: 8, duration: "3–5 min",
     },
     {
-        id: "debate_pit", emoji: "⚔️", title: "Debate Pit", desc: "Crowd votes winner",
-        color: "#06B6D4", cat: "original",
+        id: "debate_pit", emoji: "⚔️", title: "Debate Battle", desc: "Crowd votes winner",
+        color: "#06B6D4", cat: "creative",
         rules: [
             "Two players are randomly chosen as debaters.",
             "Each gets a side of an absurd topic to argue.",
@@ -181,7 +147,7 @@ const ALL_GAMES = [
     },
     {
         id: "word_association", emoji: "🔗", title: "Word Association", desc: "Match the group",
-        color: "#10B981", cat: "original",
+        color: "#10B981", cat: "wordplay",
         rules: [
             "A single word appears. Type the FIRST word that comes to mind.",
             "No second-guessing — what did your brain jump to?",
@@ -192,32 +158,8 @@ const ALL_GAMES = [
         minPlayers: 2, maxPlayers: 12, duration: "1–2 min",
     },
     {
-        id: "emoji_story", emoji: "📖", title: "Emoji Story", desc: "Emojis → story",
-        color: "#EC4899", cat: "original",
-        rules: [
-            "A sequence of emojis is shown.",
-            "Write the funniest, most creative story behind them.",
-            "All stories shown anonymously — group votes for the best.",
-            "The more absurd, the better.",
-        ],
-        scoring: "Most votes for your story → +150 pts.",
-        minPlayers: 2, maxPlayers: 12, duration: "3–4 min",
-    },
-    {
-        id: "unhinged_advice", emoji: "🤪", title: "Unhinged Advice", desc: "Absurd scenarios",
-        color: "#F97316", cat: "original",
-        rules: [
-            "A completely unhinged scenario is presented.",
-            "Give the most creative/unhinged advice you can.",
-            "Answers revealed anonymously — vote for best advice.",
-            "This is not a therapy session.",
-        ],
-        scoring: "Most votes for your advice → +150 pts.",
-        minPlayers: 2, maxPlayers: 12, duration: "3–4 min",
-    },
-    {
         id: "confessions", emoji: "🤫", title: "Anonymous Confessions", desc: "Guess who confessed",
-        color: "#7C3AED", cat: "original",
+        color: "#7C3AED", cat: "social",
         rules: [
             "Everyone writes an anonymous confession based on the prompt.",
             "Confessions revealed — vote for who you think wrote each.",
@@ -228,20 +170,8 @@ const ALL_GAMES = [
         minPlayers: 3, maxPlayers: 10, duration: "3–5 min",
     },
     {
-        id: "speed_round", emoji: "⚡", title: "Speed Round", desc: "Yes or No about yourself",
-        color: "#EF4444", cat: "original",
-        rules: [
-            "A statement about things you've done / habits you have.",
-            "Tap YES or NO — as fast as you can!",
-            "Minority answer earns bonus points.",
-            "Pure chaos. No judging.",
-        ],
-        scoring: "Minority vote → +75 pts. Are you the wild one in the group?",
-        minPlayers: 2, maxPlayers: 12, duration: "1 min",
-    },
-    {
         id: "pick_your_poison", emoji: "☠️", title: "Pick Your Poison", desc: "No good options",
-        color: "#DC2626", cat: "original",
+        color: "#DC2626", cat: "opinion",
         rules: [
             "Two TERRIBLE options. Pick the one you'd choose.",
             "There is no good answer here. Just survival.",
@@ -251,45 +181,23 @@ const ALL_GAMES = [
         scoring: "Being in the minority → +50 pts. Solidarity with the group earns bragging rights.",
         minPlayers: 2, maxPlayers: 12, duration: "1 min",
     },
+    // ─── Matching & Wordplay (continued) ───
     {
-        id: "burn_or_build", emoji: "🔥", title: "Burn or Build", desc: "Scrap or keep?",
-        color: "#F59E0B", cat: "original",
+        id: "word_bomb", emoji: "💣", title: "Word Bomb", desc: "Type before boom!",
+        color: "#EF4444", cat: "wordplay",
         rules: [
-            "Something from modern life is presented.",
-            "BURN it (scrap it forever) or BUILD it (keep/improve it)?",
-            "See how your group feels about the world's most annoying things.",
-            "Minority vote earns points.",
+            "A letter pattern appears — e.g. 'ANG'.",
+            "Hot-seat: one player must type a valid word containing that pattern.",
+            "You have a ticking fuse to answer — fail and the bomb explodes!",
+            "Fuse gets shorter each successful pass.",
+            "Lose 2 lives and you're out. Last one standing wins.",
         ],
-        scoring: "Minority vote → +50 pts per round.",
-        minPlayers: 2, maxPlayers: 12, duration: "1 min",
-    },
-    {
-        id: "rate_that_take", emoji: "⭐", title: "Rate That Take", desc: "Wild opinions revealed",
-        color: "#A855F7", cat: "original",
-        rules: [
-            "A wild opinion is revealed to everyone.",
-            "Vote: do you AGREE or DISAGREE?",
-            "Results shown — see who has controversial taste.",
-            "Minority opinion earns bonus points.",
-        ],
-        scoring: "Minority vote → +75 pts. Tie → +30 pts everyone.",
-        minPlayers: 2, maxPlayers: 12, duration: "1 min",
-    },
-    {
-        id: "whose_line", emoji: "💬", title: "Whose Line Is It?", desc: "Guess the author",
-        color: "#3B82F6", cat: "original",
-        rules: [
-            "Everyone writes something based on the prompt.",
-            "All answers revealed anonymously — guess who wrote what.",
-            "Vote for which answer belongs to which player.",
-            "The better you know your friends, the more you score.",
-        ],
-        scoring: "+100 pts for each correct attribution. +150 pts if nobody guesses yours.",
-        minPlayers: 3, maxPlayers: 10, duration: "3–5 min",
+        scoring: "+50 pts per successful word. +300 pts for the survivor. +50 pts per life remaining.",
+        minPlayers: 3, maxPlayers: 10, duration: "3–6 min",
     },
     // ─── Arcade ───
     {
-        id: "trivia_blitz", emoji: "🧠", title: "Trivia Blitz", desc: "Kahoot vibes!",
+        id: "trivia_blitz", emoji: "🧠", title: "Trivia Battle", desc: "Speed trivia!",
         color: "#8B5CF6", cat: "arcade",
         rules: [
             "A question appears with 4 coloured options (A/B/C/D).",
@@ -301,7 +209,7 @@ const ALL_GAMES = [
         minPlayers: 2, maxPlayers: 12, duration: "~30 sec/round",
     },
     {
-        id: "draw_it", emoji: "🎨", title: "Sketch & Guess", desc: "Draw it, others guess!",
+        id: "draw_it", emoji: "🎨", title: "Draw & Guess", desc: "Draw it, others guess!",
         color: "#F59E0B", cat: "arcade",
         rules: [
             "One player draws a secret word on the canvas.",
@@ -312,19 +220,6 @@ const ALL_GAMES = [
         ],
         scoring: "Guesser: 500–100 pts (by order). Drawer: +50 pts per correct guess.",
         minPlayers: 3, maxPlayers: 8, duration: "~75 sec/round",
-    },
-    {
-        id: "word_bomb", emoji: "💣", title: "Word Bomb", desc: "Type before boom!",
-        color: "#EF4444", cat: "arcade",
-        rules: [
-            "A letter pattern appears — e.g. 'ANG'.",
-            "Hot-seat: one player must type a valid word containing that pattern.",
-            "You have a ticking fuse to answer — fail and the bomb explodes!",
-            "Fuse gets shorter each successful pass.",
-            "Lose 2 lives and you're out. Last one standing wins.",
-        ],
-        scoring: "+50 pts per successful word. +300 pts for the survivor. +50 pts per life remaining.",
-        minPlayers: 3, maxPlayers: 10, duration: "3–6 min",
     },
     {
         id: "reaction_tap", emoji: "⚡", title: "Reaction Tap", desc: "Fastest wins!",
@@ -353,24 +248,94 @@ const ALL_GAMES = [
         scoring: "Winner gets +300 pts. Solo run: survive as long as possible.",
         minPlayers: 1, maxPlayers: 4, duration: "1–3 min",
     },
+    // ─── Coming Soon ───
+    {
+        id: "mafia", emoji: "🎭", title: "Mafia", desc: "Find the traitors",
+        color: "#1D4ED8", cat: "social", soon: true,
+        rules: [
+            "The village is split — most are innocent townspeople, some are hidden mafia.",
+            "Each night, the mafia secretly eliminates a villager.",
+            "Each day, the town debates and votes to eliminate a suspect.",
+            "Mafia wins if they equal the town. Town wins if all mafia are found.",
+        ],
+        scoring: "Mafia wins → +300 pts each. Town eliminates all mafia → +200 pts each.",
+        minPlayers: 5, maxPlayers: 16, duration: "10–20 min",
+    },
+    {
+        id: "spyfall", emoji: "🕶️", title: "Spyfall", desc: "Who's the spy?",
+        color: "#059669", cat: "social", soon: true,
+        rules: [
+            "Everyone gets a secret location card — except one player who gets SPY.",
+            "Players ask each other questions to figure out who doesn't know the location.",
+            "The spy tries to blend in without revealing they don't know where they are.",
+            "Vote to expose the spy, or let the spy guess the location to win!",
+        ],
+        scoring: "Spy guesses location → +400 pts. Group exposes spy → +200 pts each.",
+        minPlayers: 4, maxPlayers: 12, duration: "5–10 min",
+    },
+    {
+        id: "codenames", emoji: "🔑", title: "Codenames", desc: "One clue, many words",
+        color: "#D97706", cat: "wordplay", soon: true,
+        rules: [
+            "Split into two teams. Each has a Spymaster who sees which words belong to which team.",
+            "Spymasters give one-word clues to help their team pick the right code words.",
+            "Avoid the words belonging to the other team — and never hit the Assassin!",
+            "First team to uncover all their words wins.",
+        ],
+        scoring: "Winning team → +300 pts each. Bonus for extra correct guesses.",
+        minPlayers: 4, maxPlayers: 8, duration: "10–15 min",
+    },
+    {
+        id: "liars_dice", emoji: "🎲", title: "Liar's Dice", desc: "Bluff your roll",
+        color: "#B91C1C", cat: "social", soon: true,
+        rules: [
+            "Each player secretly rolls their dice under a cup.",
+            "Players take turns bidding on how many of a certain face value exist across ALL dice.",
+            "Call LIAR on any bid you think is impossible.",
+            "If you're wrong, you lose a die. If you're right, the bidder loses one. Last dice standing wins!",
+        ],
+        scoring: "Winning the round → +250 pts. Catching a liar → +100 pts.",
+        minPlayers: 2, maxPlayers: 8, duration: "5–15 min",
+    },
+    {
+        id: "bingo", emoji: "\uD83C\uDFB1", title: "Bingo", desc: "Dab before they do!",
+        color: "#6366F1", cat: "arcade",
+        rules: [
+            "Everyone gets a unique 5\u00d75 party bingo card.",
+            "The server calls one item every 8 seconds.",
+            "Mark cells as items are called (or tap to mark manually).",
+            "First to complete a row, column, or diagonal \u2014 tap BINGO!",
+            "The server validates your claim \u2014 no cheating!",
+        ],
+        scoring: "First valid BINGO \u2192 +250 pts. Tied winner (within 1 s) \u2192 +150 pts.",
+        minPlayers: 2, maxPlayers: 12, duration: "5\u201310 min",
+    },
 ];
+
+function playerRange(min: number, max: number) {
+    return max >= 10 ? `${min}+` : `${min}–${max}`;
+}
 
 export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart }: Props) {
     const [rounds, setRounds] = useState(5);
-    const [tab, setTab] = useState<"popular" | "original" | "arcade">("popular");
     const [infoGame, setInfoGame] = useState<typeof ALL_GAMES[0] | null>(null);
-    // Optimistic selection: host sees instant feedback without waiting for server round-trip
     const [optimisticGame, setOptimisticGame] = useState<string | null>(null);
+    const [lobbyError, setLobbyError] = useState("");
+    const lobbyErrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Sync optimistic state when server confirms
     useEffect(() => {
         if (room.gameType) setOptimisticGame(null);
     }, [room.gameType]);
 
+    useEffect(() => () => { if (lobbyErrTimer.current) clearTimeout(lobbyErrTimer.current); }, []);
+
     const selected = optimisticGame ?? room.gameType;
-    const canStart = room.players.length >= 2 && !!selected;
-    const filtered = ALL_GAMES.filter(g => g.cat === tab);
-    const meta = CAT_META[tab];
+    const selectedGame = ALL_GAMES.find(g => g.id === selected);
+    const minNeeded = selectedGame?.minPlayers ?? 2;
+    // Button is clickable whenever a game is picked; under-player check happens in onClick
+    const canStart = !!selected;
+    const activeGames = ALL_GAMES.filter(g => !(g as { soon?: boolean }).soon);
+    const soonGames = ALL_GAMES.filter(g => !!(g as { soon?: boolean }).soon);
 
     return (
         <>
@@ -423,97 +388,110 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                     </AnimatePresence>
                 </div>
 
-                {/* ─── Category tabs ─── */}
+                {/* ─── Section header ─── */}
                 <div className="flex items-center justify-between mt-2 mb-3 flex-shrink-0">
                     <span className="font-fredoka text-white text-base">
                         {isHost ? "Pick a Game" : "Game Selection"}
                     </span>
-                    <div className="flex gap-1 p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.07)" }}>
-                        {(["popular", "original", "arcade"] as const).map(t => (
-                            <button key={t}
-                                onClick={() => { sfxTap(); setTab(t); }}
-                                className="font-nunito font-800 text-xs px-2.5 py-1.5 rounded-xl transition-all duration-200"
-                                style={tab === t
-                                    ? { background: "rgba(255,255,255,0.15)", color: "white" }
-                                    : { color: "rgba(255,255,255,0.35)" }}>
-                                {CAT_META[t].icon} {CAT_META[t].label}
-                            </button>
-                        ))}
-                    </div>
+                    <span className="font-nunito text-white/30 text-xs">{activeGames.length} games</span>
                 </div>
 
-                {/* ─── Game grid (2-col) — AnimatePresence only on TAB change, not on game select ─── */}
+                {/* ─── Game grid — all games, flat scrollable ─── */}
                 <div className="flex-1 scroll-y pb-2 min-h-0 -mx-1">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={tab}
-                            initial={{ opacity: 0, x: 14 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -14 }}
-                            transition={{ duration: 0.15 }}
-                            className="px-1 pt-1"
-                        >
-                            {/* Category header */}
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-xl">{meta.icon}</span>
-                                <span className="font-fredoka text-white/70 text-base">{meta.label}</span>
-                                <span className="font-nunito text-white/30 text-xs ml-1">{filtered.length} games</span>
-                            </div>
+                    <div className="px-1 pt-1">
 
-                            <div className="grid grid-cols-2 gap-3">
-                                {filtered.map(g => {
-                                    const isSelected = selected === g.id;
-                                    return (
-                                        <div key={g.id}
-                                            className="relative flex flex-col rounded-2xl overflow-hidden"
-                                            style={{
-                                                background: isSelected ? g.color + "26" : "rgba(255,255,255,0.05)",
-                                                border: `1.5px solid ${isSelected ? g.color + "88" : "rgba(255,255,255,0.08)"}`,
-                                                boxShadow: isSelected ? `0 0 22px ${g.color}44` : "none",
-                                                transition: "background 0.18s, border-color 0.18s, box-shadow 0.18s",
+                        {/* Active games */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                            {activeGames.map(g => {
+                                const isSelected = selected === g.id;
+                                const pill = CAT_PILLS[g.cat];
+                                return (
+                                    <div key={g.id}
+                                        className="relative flex flex-col rounded-2xl overflow-hidden"
+                                        style={{
+                                            background: isSelected ? g.color + "1e" : "rgba(255,255,255,0.06)",
+                                            border: `1.5px solid ${isSelected ? g.color + "90" : "rgba(255,255,255,0.09)"}`,
+                                            boxShadow: isSelected ? `0 0 24px ${g.color}48` : "none",
+                                            transition: "background 0.18s, border-color 0.18s, box-shadow 0.18s",
+                                        }}>
+                                        <button
+                                            className="flex flex-col items-center pt-4 pb-2.5 px-2 text-center w-full active:scale-95 transition-transform"
+                                            onClick={() => {
+                                                if (!isHost) return;
+                                                sfxSelect();
+                                                setOptimisticGame(g.id);
+                                                onSelectGame(g.id);
                                             }}>
-                                            {/* Tap zone */}
-                                            <button
-                                                className="flex flex-col items-center pt-5 pb-3 px-2 text-center w-full active:scale-95 transition-transform"
-                                                onClick={() => {
-                                                    if (!isHost) return;
-                                                    sfxSelect();
-                                                    setOptimisticGame(g.id); // instant local feedback
-                                                    onSelectGame(g.id);
-                                                }}>
-                                                <div className="text-4xl mb-2"
-                                                    style={{ filter: isSelected ? `drop-shadow(0 2px 12px ${g.color})` : "none" }}>
-                                                    {g.emoji}
-                                                </div>
-                                                <div className="font-fredoka text-white text-sm leading-tight">{g.title}</div>
-                                                <div className="font-nunito text-white/40 text-[10px] mt-0.5 leading-snug">{g.desc}</div>
-                                            </button>
+                                            <div className="text-3xl mb-1.5"
+                                                style={{ filter: isSelected ? `drop-shadow(0 2px 14px ${g.color})` : "none" }}>
+                                                {g.emoji}
+                                            </div>
+                                            <div className="font-fredoka text-white text-sm leading-tight">{g.title}</div>
+                                            <div className="mt-1.5 px-2 py-0.5 rounded-full font-nunito text-[9px] font-bold"
+                                                style={{ background: pill.color + "22", color: pill.color }}>
+                                                {pill.label}
+                                            </div>
+                                        </button>
+                                        <div className="h-[2px] w-full flex-shrink-0"
+                                            style={{ background: g.color + (isSelected ? "cc" : "55") }} />
+                                        <button
+                                            onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
+                                            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full text-[10px]"
+                                            style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}>
+                                            ℹ
+                                        </button>
+                                        {isSelected && (
+                                            <div className="absolute top-2 left-2 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                                                style={{ background: g.color }}>
+                                                ✓
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
 
-                                            {/* Bottom color bar */}
-                                            <div className="h-1 w-full flex-shrink-0"
-                                                style={{ background: g.color + (isSelected ? "cc" : "55") }} />
+                        {/* Coming soon section */}
+                        <div className="flex items-center gap-2.5 mt-5 mb-3">
+                            <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+                            <span className="font-nunito text-[10px] uppercase tracking-widest text-white/30 font-bold">Coming Soon</span>
+                            <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+                        </div>
 
-                                            {/* Info button */}
-                                            <button
-                                                onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
-                                                className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full text-[10px]"
-                                                style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}>
-                                                ℹ
-                                            </button>
-
-                                            {/* Selected check */}
-                                            {isSelected && (
-                                                <div className="absolute top-2 left-2 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-                                                    style={{ background: g.color }}>
-                                                    ✓
-                                                </div>
-                                            )}
+                        <div className="grid grid-cols-2 gap-2.5">
+                            {soonGames.map(g => {
+                                const pill = CAT_PILLS[g.cat];
+                                return (
+                                    <div key={g.id}
+                                        className="relative flex flex-col rounded-2xl overflow-hidden"
+                                        style={{
+                                            background: "rgba(255,255,255,0.03)",
+                                            border: "1.5px solid rgba(255,255,255,0.06)",
+                                        }}>
+                                        {/* Overlay */}
+                                        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl pointer-events-none"
+                                            style={{ background: "rgba(0,0,0,0.42)" }}>
+                                            <span className="font-nunito text-[9px] uppercase tracking-widest text-white/40 font-bold">Coming Soon</span>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </motion.div>
-                    </AnimatePresence>
+                                        <button
+                                            className="flex flex-col items-center pt-4 pb-2.5 px-2 text-center w-full"
+                                            style={{ opacity: 0.32 }}
+                                            onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}>
+                                            <div className="text-3xl mb-1.5">{g.emoji}</div>
+                                            <div className="font-fredoka text-white text-sm leading-tight">{g.title}</div>
+                                            <div className="mt-1.5 px-2 py-0.5 rounded-full font-nunito text-[9px] font-bold"
+                                                style={{ background: pill.color + "22", color: pill.color }}>
+                                                {pill.label}
+                                            </div>
+                                        </button>
+                                        <div className="h-[2px] w-full flex-shrink-0"
+                                            style={{ background: g.color + "44" }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                    </div>
                 </div>
 
                 {/* ─── Bottom controls ─── */}
@@ -535,8 +513,18 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                             </div>
                             <button
                                 className={`btn-primary flex-1 ${canStart ? "" : "opacity-40 pointer-events-none"}`}
-                                onClick={() => { sfxTap(); onStart(rounds); }}>
-                                {selected ? (room.players.length < 2 ? "Need 2+ players" : "🎮 Start!") : "Pick a game"}
+                                onClick={() => {
+                                    sfxTap();
+                                    if (!selected) return;
+                                    if (room.players.length < minNeeded) {
+                                        if (lobbyErrTimer.current) clearTimeout(lobbyErrTimer.current);
+                                        setLobbyError(`Need at least ${minNeeded} players to start ${selectedGame?.title ?? "this game"}!`);
+                                        lobbyErrTimer.current = setTimeout(() => setLobbyError(""), 5000);
+                                        return;
+                                    }
+                                    onStart(rounds);
+                                }}>
+                                {selected ? (room.players.length < minNeeded ? `Need ${minNeeded}+ players` : "🎮 Start!") : "Pick a game"}
                             </button>
                         </div>
                     ) : (
@@ -546,6 +534,25 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                     )}
                 </div>
             </div>
+
+            <AnimatePresence>
+                {lobbyError && (
+                    <motion.div
+                        key="lobby-err"
+                        initial={{ opacity: 0, y: -30, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -30, scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                        className="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                        style={{ width: "calc(100% - 40px)", maxWidth: 380 }}
+                    >
+                        <div className="w-full px-4 py-3 rounded-2xl font-nunito text-sm text-white text-center shadow-2xl"
+                            style={{ background: "linear-gradient(135deg,#7c3aed,#dc2626)", boxShadow: "0 8px 32px rgba(220,38,38,0.45)" }}>
+                            ⚠️ {lobbyError}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <GameInfoModal game={infoGame} onClose={() => setInfoGame(null)} />
         </>

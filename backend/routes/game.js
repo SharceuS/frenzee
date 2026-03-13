@@ -6,6 +6,7 @@ const { GAME_CATALOGUE } = require("../catalogue");
 const {
   broadcast, startRound, resolveRound,
   checkAllAnswered, checkAllVoted, checkAllMatched,
+  validateBingoClaim,
 } = require("../games/rounds");
 
 const router = Router();
@@ -125,6 +126,47 @@ router.post("/:code/round/again", withRoom, hostOnly, (req, res) => {
   room.round = 0; room.usedQuestions = []; room.gameType = null; room.phase = "lobby";
   broadcast(room.code);
   res.json({ ok: true });
+});
+
+// ── Bingo ─────────────────────────────────────────────────────────────────────
+
+// POST /rooms/:code/bingo/claim  — player claims bingo
+// The server validates the claim deterministically from bingoCards + bingoCalledItems.
+// No client-side mark state is trusted.
+router.post("/:code/bingo/claim", withRoom, (req, res) => {
+  const room = req.room;
+  const { playerId } = req.body;
+  if (room.phase !== "bingo_live") return res.status(400).json({ ok: false, error: "Not in bingo round" });
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) return res.status(403).json({ ok: false, error: "Not in room" });
+  // Reject duplicate claims from the same player.
+  if ((room.bingoWinners || []).some(w => w.id === playerId)) {
+    return res.json({ ok: true, alreadyClaimed: true });
+  }
+  const card = (room.bingoCards || {})[playerId];
+  if (!card) return res.status(400).json({ ok: false, error: "No card found" });
+
+  const calledSet = new Set(room.bingoCalledItems || []);
+  const { valid, pattern } = validateBingoClaim(card, calledSet);
+
+  if (!valid) return res.status(400).json({ ok: false, error: "No valid bingo pattern yet" });
+
+  // Record winner.
+  if (!room.bingoWinners) room.bingoWinners = [];
+  room.bingoWinners.push({ id: playerId, name: player.name, pattern });
+  broadcast(room.code);
+
+  // Allow a short tie window (1 s) then resolve.
+  // If another player claims in the same window they also get added before resolve.
+  if (room.bingoWinners.length === 1) {
+    setTimeout(() => {
+      const r = require("../store").getRoom(room.code);
+      if (!r || r.phase !== "bingo_live") return;
+      resolveRound(r);
+    }, 1000);
+  }
+
+  res.json({ ok: true, pattern });
 });
 
 module.exports = router;

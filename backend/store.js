@@ -108,6 +108,10 @@ function sanitize(room) {
     reactionTimes: room.reactionTimes ?? {},
     // Bomberman (game-over flag only; state sent via bomber_state / bomber_grid events)
     bomberGameOver: room.bomberGameOver ?? false,
+    // Bingo
+    bingoCards: room.bingoCards ?? null,          // { [playerId]: number[] } — 25 item-indices, index 12 is FREE
+    bingoCalledItems: room.bingoCalledItems ?? [], // ordered list of called item indices
+    bingoWinners: room.bingoWinners ?? [],         // [{ id, name, pattern }]
   };
 }
 

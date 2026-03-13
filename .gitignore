@@ -43,3 +43,8 @@ Thumbs.db
 .cache/
 coverage/
 *.zip
+
+
+docs/
+start.ps1
+start.sh

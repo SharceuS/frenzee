@@ -94,3 +94,10 @@ export async function apiBombermanInput(code: string, playerId: string, dx: numb
 export async function apiBombermanPing(code: string, clientTs: number) {
   return post<{ ts: number }>(`/rooms/${code}/bomberman/ping`, { ts: clientTs });
 }
+
+// ── Bingo ─────────────────────────────────────────────────────────────────────
+export async function apiBingoClaim(code: string, playerId: string) {
+  return post<{ ok: boolean; pattern?: string; alreadyClaimed?: boolean; error?: string }>(
+    `/rooms/${code}/bingo/claim`, { playerId }
+  );
+}
