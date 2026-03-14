@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Room } from "@/lib/types";
+import { Room, AvatarConfig } from "@/lib/types";
 import GameInfoModal from "@/components/GameInfoModal";
 import SvgAvatar, { defaultAvatarFromId } from "@/components/SvgAvatar";
+import AvatarEditSheet from "@/components/AvatarEditSheet";
+import MicPill from "@/components/MicPill";
 import { sfxTap, sfxSelect } from "@/lib/sounds";
 
 interface Props {
@@ -12,7 +14,20 @@ interface Props {
     isHost: boolean;
     onSelectGame: (gameType: string) => void;
     onStart: (maxRounds: number) => void;
+    // Profile re-edit
+    onUpdateProfile: (avatar: AvatarConfig) => void;
+    // Mic
+    micEnabled: boolean;
+    micMuted: boolean;
+    micPermission: "unknown" | "granted" | "denied";
+    onToggleMic: () => void;
+    onToggleMute: () => void;
 }
+
+// Games that have portrait art assets
+const GAME_ART_MAP: Record<string, string> = {
+    guess_the_liar: "/images/games/findtheliar.jpg",
+};
 
 const CAT_PILLS: Record<string, { label: string; color: string }> = {
     social:   { label: "Social",   color: "#7C3AED" },
@@ -302,11 +317,12 @@ function playerRange(min: number, max: number) {
     return max >= 10 ? `${min}+` : `${min}–${max}`;
 }
 
-export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart }: Props) {
+export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart, onUpdateProfile, micEnabled, micMuted, micPermission, onToggleMic, onToggleMute }: Props) {
     const [rounds, setRounds] = useState(5);
     const [infoGame, setInfoGame] = useState<typeof ALL_GAMES[0] | null>(null);
     const [optimisticGame, setOptimisticGame] = useState<string | null>(null);
     const [lobbyError, setLobbyError] = useState("");
+    const [editingAvatar, setEditingAvatar] = useState(false);
     const lobbyErrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
@@ -328,11 +344,20 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
             <div className="page-fill" style={{ gap: 0 }}>
                 {/* ─── Top bar ─── */}
                 <div className="flex items-center justify-between py-3 px-1 flex-shrink-0">
-                    <div>
-                        <div className="font-fredoka text-xl text-white leading-none">Game Lobby</div>
-                        <div className="font-nunito text-white/40 text-xs mt-0.5">
-                            {room.players.length} / 12 players
+                    <div className="flex items-center gap-3">
+                        <div>
+                            <div className="font-fredoka text-xl text-white leading-none">Game Lobby</div>
+                            <div className="font-nunito text-white/40 text-xs mt-0.5">
+                                {room.players.length} / 12 players
+                            </div>
                         </div>
+                        <MicPill
+                            micEnabled={micEnabled}
+                            micMuted={micMuted}
+                            micPermission={micPermission}
+                            onToggleEnable={onToggleMic}
+                            onToggleMute={onToggleMute}
+                        />
                     </div>
                     <div className="text-right">
                         <div className="font-nunito text-white/35 text-xs uppercase tracking-widest">Room</div>
@@ -353,19 +378,22 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                                 exit={{ scale: 0, opacity: 0 }}
                                 transition={{ delay: i * 0.04, type: "spring", stiffness: 300 }}
                                 className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                                {/* Outer div handles the ring (animated for host); inner div handles overflow clipping */}
-                                <motion.div
-                                    className={`rounded-2xl flex-shrink-0 ${p.isHost ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#0C0818]" : ""}`}
-                                    animate={p.isHost ? { boxShadow: ["0 0 0px rgba(234,179,8,0.2)", "0 0 10px rgba(234,179,8,0.9)", "0 0 0px rgba(234,179,8,0.2)"] } : {}}
-                                    transition={p.isHost ? { duration: 1.4, repeat: Infinity, ease: "easeInOut" } : {}}
-                                >
-                                    <div className="w-12 h-12 rounded-2xl overflow-hidden">
+                                {/* Avatar + HOST badge */}
+                                <div className="relative">
+                                    {p.isHost && <div className="host-badge">👑 HOST</div>}
+                                    <div
+                                        className={`w-12 h-12 rounded-2xl overflow-hidden${p.id === myId ? " cursor-pointer active:scale-90 transition-transform" : ""}`}
+                                        onClick={p.id === myId ? () => setEditingAvatar(true) : undefined}
+                                    >
                                         <SvgAvatar
                                             config={p.avatar ?? defaultAvatarFromId(p.id)}
                                             size={48}
                                         />
                                     </div>
-                                </motion.div>
+                                    {p.id === myId && (
+                                        <div style={{ position: "absolute", bottom: -4, right: -4, background: "rgba(168,85,247,0.85)", borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, border: "1.5px solid #0C0818", pointerEvents: "none" }}>✏️</div>
+                                    )}
+                                </div>
                                 <span className="font-nunito text-xs text-white/55 leading-none max-w-[48px] truncate text-center">
                                     {p.id === myId ? "you" : p.name.split(" ")[0]}
                                 </span>
@@ -386,52 +414,59 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
                 <div className="flex-1 scroll-y pb-2 min-h-0 -mx-1">
                     <div className="px-1 pt-1">
 
-                        {/* Active games */}
-                        <div className="grid grid-cols-2 gap-2.5">
+                        {/* Active games — portrait art cards */}
+                        <div className="grid grid-cols-2 gap-3">
                             {activeGames.map(g => {
                                 const isSelected = selected === g.id;
                                 const pill = CAT_PILLS[g.cat];
+                                const artSrc = GAME_ART_MAP[g.id];
                                 return (
-                                    <div key={g.id}
-                                        className="relative flex flex-col rounded-2xl overflow-hidden"
-                                        style={{
-                                            background: isSelected ? g.color + "1e" : "rgba(255,255,255,0.06)",
-                                            border: `1.5px solid ${isSelected ? g.color + "90" : "rgba(255,255,255,0.09)"}`,
-                                            boxShadow: isSelected ? `0 0 24px ${g.color}48` : "none",
-                                            transition: "background 0.18s, border-color 0.18s, box-shadow 0.18s",
-                                        }}>
-                                        <button
-                                            className="flex flex-col items-center pt-4 pb-2.5 px-2 text-center w-full active:scale-95 transition-transform"
+                                    <div key={g.id} style={{ position: "relative", borderRadius: 21 }}>
+                                        {/* Rotating heat glow behind card */}
+                                        <div className="game-portrait-glow" style={{ opacity: isSelected ? 1 : 0.45 }} />
+                                        {/* Card */}
+                                        <div
+                                            className={`game-portrait-card${isSelected ? " gpc-selected" : ""}`}
+                                            style={{ position: "relative", zIndex: 1, height: 175 }}
                                             onClick={() => {
                                                 if (!isHost) return;
                                                 sfxSelect();
                                                 setOptimisticGame(g.id);
                                                 onSelectGame(g.id);
                                             }}>
-                                            <div className="text-3xl mb-1.5"
-                                                style={{ filter: isSelected ? `drop-shadow(0 2px 14px ${g.color})` : "none" }}>
-                                                {g.emoji}
-                                            </div>
-                                            <div className="font-fredoka text-white text-sm leading-tight">{g.title}</div>
-                                            <div className="mt-1.5 px-2 py-0.5 rounded-full font-nunito text-[9px] font-bold"
-                                                style={{ background: pill.color + "22", color: pill.color }}>
+                                            {/* Art or fallback fill */}
+                                            {artSrc ? (
+                                                <img src={artSrc} alt={g.title}
+                                                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "saturate(0.22) contrast(1.08)" }} />
+                                            ) : (
+                                                <div style={{
+                                                    position: "absolute", inset: 0,
+                                                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7,
+                                                    background: `linear-gradient(145deg, ${g.color}35 0%, ${g.color}10 60%, rgba(12,8,24,0.96) 100%)`,
+                                                }}>
+                                                    <div style={{ fontSize: 44, filter: `drop-shadow(0 2px 12px ${g.color}88)` }}>{g.emoji}</div>
+                                                    <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 12.5, color: "rgba(255,255,255,0.9)", textAlign: "center", padding: "0 10px", lineHeight: 1.25 }}>{g.title}</div>
+                                                </div>
+                                            )}
+                                            {/* Bottom gradient overlay */}
+                                            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 50%)", pointerEvents: "none", zIndex: 2 }} />
+                                            {/* Category label bottom-left */}
+                                            <div style={{ position: "absolute", bottom: 8, left: 9, zIndex: 3, fontFamily: "'Nunito', sans-serif", fontSize: 8.5, fontWeight: 900, color: pill.color, backgroundColor: pill.color + "28", padding: "2px 6px", borderRadius: 99, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                                                 {pill.label}
                                             </div>
-                                        </button>
-                                        <div className="h-[2px] w-full flex-shrink-0"
-                                            style={{ background: g.color + (isSelected ? "cc" : "55") }} />
-                                        <button
-                                            onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
-                                            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full text-[10px]"
-                                            style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}>
-                                            ℹ
-                                        </button>
-                                        {isSelected && (
-                                            <div className="absolute top-2 left-2 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-                                                style={{ background: g.color }}>
-                                                ✓
-                                            </div>
-                                        )}
+                                            {/* Info button top-right */}
+                                            <button
+                                                onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
+                                                style={{ position: "absolute", top: 7, right: 7, zIndex: 10, width: 23, height: 23, borderRadius: "50%", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", border: "1px solid rgba(255,255,255,0.28)", color: "rgba(255,255,255,0.8)", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                                                ℹ
+                                            </button>
+                                            {/* Selected check top-left */}
+                                            {isSelected && (
+                                                <div style={{ position: "absolute", top: 7, left: 7, zIndex: 10, width: 22, height: 22, borderRadius: "50%", background: g.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", fontWeight: "bold" }}>
+                                                    ✓
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -541,6 +576,15 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart 
             </AnimatePresence>
 
             <GameInfoModal game={infoGame} onClose={() => setInfoGame(null)} />
+
+            {/* Avatar re-edit sheet */}
+            <AvatarEditSheet
+                open={editingAvatar}
+                onClose={() => setEditingAvatar(false)}
+                onSave={onUpdateProfile}
+                initialAvatar={room.players.find(p => p.id === myId)?.avatar ?? { head: 0, eyes: 0, mouth: 0, color: 0 }}
+                playerName={room.players.find(p => p.id === myId)?.name}
+            />
         </>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Room, AnswerEntry } from "@/lib/types";
 
 interface Props {
@@ -28,11 +28,13 @@ const ANONYMOUS_VOTE_GAMES = ["roast_room", "finish_the_sentence", "confessions"
 
 export default function VotingScreen({ room, myId, onVote }: Props) {
     const [voted, setVoted] = useState<string | null>(null);
+    const [localSelected, setLocalSelected] = useState<string | null>(null);
     const hasVoted = room.players.find(p => p.id === myId)?.hasVoted ?? !!voted;
     const gt = room.gameType ?? "guess_the_liar";
     const cfg = VOTE_CONFIGS[gt] ?? VOTE_CONFIGS["guess_the_liar"];
     const answers = (room.answers ?? []) as AnswerEntry[];
     const qd = room.questionData as Record<string, string> | null;
+    const runoffIds = room.voteRunoffIds ?? null;
 
     // For two_truths: statements are in answers[spotlightId].answer = {statements, lieIndex}
     const spotlightAnswer = gt === "two_truths"
@@ -58,11 +60,20 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
         return targetId !== myId;
     };
 
+    // Single-tap selects locally; lock-in button sends to backend
     const handle = (targetId: string) => {
         if (hasVoted || !canVote(targetId)) return;
-        setVoted(targetId);
-        onVote(targetId);
+        setLocalSelected(targetId);
     };
+
+    const handleLockIn = () => {
+        if (!localSelected || hasVoted) return;
+        setVoted(localSelected);
+        onVote(localSelected);
+    };
+
+    // Combined selection for display: locked vote > local selection
+    const displaySelected = (id: string) => (voted ?? localSelected) === id;
 
     const isSpectator = (gt === "two_truths" && myId === room.spotlightId)
         || (gt === "debate_pit" && room.debaterIds?.includes(myId))
@@ -121,11 +132,11 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                     transition={{ delay: i * 0.07 }}
                                     onClick={() => handle(String(i))}
                                     disabled={hasVoted}
-                                    className={`vote-card w-full text-left ${voted === String(i) ? "selected" : ""} ${hasVoted && voted !== String(i) ? "opacity-40" : ""}`}>
+                                    className={`vote-card w-full text-left ${displaySelected(String(i)) ? "selected" : ""} ${hasVoted && !displaySelected(String(i)) ? "opacity-40" : ""}`}>
                                     <div className="flex items-start gap-3">
                                         <span className="font-fredoka text-purple-400 text-lg w-5 flex-shrink-0">{i + 1}</span>
                                         <p className="font-nunito font-bold text-white text-base leading-snug">{s}</p>
-                                        {voted === String(i) && <span className="ml-auto text-purple-300 font-nunito text-xs flex-shrink-0">Your pick ✓</span>}
+                                        {displaySelected(String(i)) && <span className="ml-auto text-purple-300 font-nunito text-xs flex-shrink-0">{voted === String(i) ? "Locked ✓" : "Your pick"}</span>}
                                     </div>
                                 </motion.button>
                             ))}
@@ -145,11 +156,11 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                         onClick={() => handle(p.id)}
                                         disabled={hasVoted}
                                         className={`vote-card w-full text-left ${
-                                            voted === p.id ? "selected" : ""
-                                        } ${hasVoted && voted !== p.id ? "opacity-40" : ""}`}>
+                                            displaySelected(p.id) ? "selected" : ""
+                                        } ${hasVoted && !displaySelected(p.id) ? "opacity-40" : ""}`}>
                                         <div className="flex items-center gap-3">
                                             <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
-                                            {voted === p.id && <span className="font-nunito text-purple-300 text-xs">Your pick ✓</span>}
+                                            {displaySelected(p.id) && <span className="font-nunito text-purple-300 text-xs">{voted === p.id ? "Locked ✓" : "Your pick"}</span>}
                                         </div>
                                     </motion.button>
                                 ))}
@@ -169,34 +180,45 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                         onClick={() => handle(p.id)}
                                         disabled={hasVoted}
                                         className={`vote-card w-full text-left ${
-                                            voted === p.id ? "selected" : ""
-                                        } ${hasVoted && voted !== p.id ? "opacity-40" : ""}`}>
+                                            displaySelected(p.id) ? "selected" : ""
+                                        } ${hasVoted && !displaySelected(p.id) ? "opacity-40" : ""}`}>
                                         <div className="flex items-center gap-3">
                                             <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
-                                            {voted === p.id && <span className="font-nunito text-purple-300 text-xs">Your pick ✓</span>}
+                                            {displaySelected(p.id) && <span className="font-nunito text-purple-300 text-xs">{voted === p.id ? "Locked ✓" : "Your pick"}</span>}
                                         </div>
                                     </motion.button>
                                 ))}
                         </>
                     )}
 
-                    {/* GUESS THE LIAR: show answer + player name */}
+                    {/* GUESS THE LIAR: show answer + player name, with runoff support */}
                     {gt === "guess_the_liar" && answers.length > 0 && (
                         <>
+                            {runoffIds && (
+                                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                                    className="flex-shrink-0 px-4 py-2.5 rounded-2xl text-center font-nunito text-sm font-bold text-amber-300"
+                                    style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", marginBottom: 4 }}>
+                                    ⚠️ No majority — vote again!
+                                </motion.div>
+                            )}
                             <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-1">📝 All answers</p>
                             {[...answers]
                                 .sort((a, b) => a.playerId.localeCompare(b.playerId))
-                                .filter(a => a.playerId !== myId)
+                                .filter(a => {
+                                    if (a.playerId === myId) return false;
+                                    if (runoffIds) return runoffIds.includes(a.playerId);
+                                    return true;
+                                })
                                 .map((a, i) => (
                                     <motion.button key={a.playerId}
                                         initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: i * 0.07 }}
                                         onClick={() => handle(a.playerId)}
                                         disabled={hasVoted || !canVote(a.playerId)}
-                                        className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${(hasVoted && voted !== a.playerId) || !canVote(a.playerId) ? "opacity-40" : ""}`}>
+                                        className={`vote-card w-full text-left ${displaySelected(a.playerId) ? "selected" : ""} ${(hasVoted && !displaySelected(a.playerId)) || !canVote(a.playerId) ? "opacity-40" : ""}`}>
                                         <p className="font-nunito text-white/40 text-xs mb-1">{a.playerName}</p>
                                         <p className="font-nunito font-bold text-white text-base leading-snug break-words">{a.answer as string}</p>
-                                        {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
+                                        {displaySelected(a.playerId) && <p className="font-nunito text-purple-300 text-xs mt-1">{voted === a.playerId ? "Locked ✓" : "Your pick"}</p>}
                                     </motion.button>
                                 ))}
                         </>
@@ -215,9 +237,9 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                         transition={{ delay: i * 0.07 }}
                                         onClick={() => handle(a.playerId)}
                                         disabled={hasVoted}
-                                        className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${hasVoted && voted !== a.playerId ? "opacity-40" : ""}`}>
+                                        className={`vote-card w-full text-left ${displaySelected(a.playerId) ? "selected" : ""} ${hasVoted && !displaySelected(a.playerId) ? "opacity-40" : ""}`}>
                                         <p className="font-nunito font-bold text-white text-base leading-snug break-words">{a.answer as string}</p>
-                                        {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1">Your pick ✓</p>}
+                                        {displaySelected(a.playerId) && <p className="font-nunito text-purple-300 text-xs mt-1">{voted === a.playerId ? "Locked ✓" : "Your pick"}</p>}
                                     </motion.button>
                                 ))}
                         </>
@@ -235,12 +257,12 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                                         transition={{ delay: i * 0.07 }}
                                         onClick={() => handle(a.playerId)}
                                         disabled={hasVoted}
-                                        className={`vote-card w-full text-left ${voted === a.playerId ? "selected" : ""} ${hasVoted && voted !== a.playerId ? "opacity-40" : ""}`}>
+                                        className={`vote-card w-full text-left ${displaySelected(a.playerId) ? "selected" : ""} ${hasVoted && !displaySelected(a.playerId) ? "opacity-40" : ""}`}>
                                         <div className={`inline-flex text-xs font-extrabold font-nunito px-2 py-0.5 rounded-lg mb-2 ${isFor ? "side-for" : "side-against"}`}>
                                             {isFor ? "FOR" : "AGAINST"} — {a.playerName}
                                         </div>
                                         <p className="font-nunito text-white text-sm leading-snug">{a.answer as string}</p>
-                                        {voted === a.playerId && <p className="font-nunito text-purple-300 text-xs mt-1.5">Your vote ✓</p>}
+                                        {displaySelected(a.playerId) && <p className="font-nunito text-purple-300 text-xs mt-1.5">{voted === a.playerId ? "Locked ✓" : "Your pick"}</p>}
                                     </motion.button>
                                 );
                             })}
@@ -248,6 +270,26 @@ export default function VotingScreen({ room, myId, onVote }: Props) {
                     )}
                 </div>
             )}
+
+            {/* Sticky lock-in confirm button */}
+            <AnimatePresence>
+                {localSelected && !hasVoted && !isSpectator && (
+                    <motion.div
+                        key="lock-in-btn"
+                        initial={{ opacity: 0, y: 24 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 24 }}
+                        transition={{ type: "spring", stiffness: 340, damping: 28 }}
+                        className="flex-shrink-0 pt-2 pb-2">
+                        <button
+                            onClick={handleLockIn}
+                            className="btn-primary w-full"
+                            style={{ fontSize: "1.05rem" }}>
+                            🔒 Lock In Vote
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {hasVoted && !isSpectator && (
                 <p className="font-nunito text-white/40 text-sm text-center wait-pulse flex-shrink-0 pb-2">

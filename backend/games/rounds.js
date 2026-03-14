@@ -90,6 +90,7 @@ function startRound(room) {
   room.liarId = null; room.spotlightId = null; room.debaterIds = [];
   room.roundResult = null;
   room.triviaCorrectIndex = null;
+  room.voteRunoffIds = null; room.voteRound = 0; room.voteNeedsMajority = false;
   const gt = room.gameType;
 
   if (gt === "guess_the_liar") {
@@ -299,7 +300,6 @@ function startRound(room) {
       startSpyfallTurnTimer(room);
     }, 5000);
   } else if (gt === "mafia") {
-    // ── Mafia: assign hidden roles and deliver them privately ─────────────────
     const n = room.players.length;
     const mafiaCount = n >= 7 ? 2 : 1;
     const shuffled = shuffle(room.players);
@@ -314,14 +314,18 @@ function startRound(room) {
     room.mafiaWinner = null;
     room._mafiaDayTimer = null;
     room._mafiaVoteTimer = null;
-    // First mafiaCount → Mafia, next → Doctor, next → Detective, rest → Villager
+
     shuffled.forEach((p, i) => {
       if (i < mafiaCount) room.mafiaRoles[p.id] = "mafia";
       else if (i === mafiaCount) room.mafiaRoles[p.id] = "doctor";
       else if (i === mafiaCount + 1) room.mafiaRoles[p.id] = "detective";
       else room.mafiaRoles[p.id] = "villager";
     });
-    const mafiaTeam = room.players.filter(p => room.mafiaRoles[p.id] === "mafia").map(p => ({ id: p.id, name: p.name }));
+
+    const mafiaTeam = room.players
+      .filter(p => room.mafiaRoles[p.id] === "mafia")
+      .map(p => ({ id: p.id, name: p.name }));
+
     room.players.forEach(p => {
       const role = room.mafiaRoles[p.id];
       sseSend(room.code, p.id, "your_mafia_role", {
@@ -329,14 +333,17 @@ function startRound(room) {
         mafiaTeam: role === "mafia" ? mafiaTeam : null,
       });
     });
+
     room.currentQuestion = null;
     room.questionData = { mafiaCount, playerCount: n };
-    room.phase = "question"; broadcast(room.code);
-    // Auto-advance to first night after 7 s.
+    room.phase = "question";
+    broadcast(room.code);
+
     setTimeout(() => {
       const r = getRoom(room.code);
       if (!r || r.phase !== "question" || r.gameType !== "mafia") return;
-      r.phase = "mafia_night"; broadcast(r.code);
+      r.phase = "mafia_night";
+      broadcast(r.code);
     }, 7000);
   } else if (gt === "bingo") {
     // Assign a unique shuffled 5x5 number card to every player.
@@ -347,10 +354,10 @@ function startRound(room) {
     room.bingoWinners = [];
     room._bingoCallTimer = null;
     const BINGO_CARD_SLOTS = 25;
-    const FREE_SLOT = 12; // center of 5x5
+    const FREE_SLOT = 12;
     room.players.forEach(p => {
       const pool = Array.from({ length: 75 }, (_, i) => i + 1);
-      const picked = shuffle(pool).slice(0, BINGO_CARD_SLOTS - 1); // 24 unique numbers
+      const picked = shuffle(pool).slice(0, BINGO_CARD_SLOTS - 1);
       const card = [];
       for (let i = 0; i < BINGO_CARD_SLOTS; i++) {
         card.push(i === FREE_SLOT ? -1 : picked[i < FREE_SLOT ? i : i - 1]);
@@ -422,10 +429,10 @@ function scheduleBingoCall(room) {
     const called = new Set(r.bingoCalledItems);
     // Build pool of uncalled numbers that appear on at least one card.
     const onACard = new Set();
-    Object.values(r.bingoCards).forEach(card => card.forEach(idx => { if (idx !== -1) onACard.add(idx); }));
-    const remaining = [...onACard].filter(i => !called.has(i));
+    Object.values(r.bingoCards).forEach(card => card.forEach(num => { if (num !== -1) onACard.add(num); }));
+    const remaining = [...onACard].filter(n => !called.has(n));
     if (remaining.length === 0) {
-      // All items called — resolve with whoever has bingo, or no winner.
+      // All numbers called — resolve with whoever has bingo, or no winner.
       resolveRound(r);
       return;
     }
@@ -482,21 +489,44 @@ function resolveRound(room) {
   if (gt === "guess_the_liar") {
     const vc = {};
     room.players.forEach(p => { vc[p.id] = 0; });
-    Object.values(room.votes).forEach(v => { vc[v] = (vc[v] || 0) + 1; });
-    const max = Math.max(...Object.values(vc));
-    const topVotedIds = Object.keys(vc).filter(id => vc[id] === max);
-    // Liar is caught only when they have the UNIQUE highest vote count.
-    // A tie at the top (every player gets one vote, for example) means no clear
-    // accusation — the liar escapes.
-    const caught = topVotedIds.length === 1 && topVotedIds[0] === room.liarId;
+    Object.values(room.votes).forEach(v => { if (vc[v] !== undefined) vc[v]++; });
+    const totalVotes = Object.keys(room.votes).length;
+    const majorityThreshold = Math.floor(totalVotes / 2) + 1;
+
+    // Find if any candidate has strict majority.
+    const majorityId = Object.keys(vc).find(id => vc[id] >= majorityThreshold) ?? null;
+
+    if (!majorityId) {
+      // No majority — compute top vote getters for a runoff and re-open voting.
+      const maxVotes = totalVotes > 0 ? Math.max(...Object.values(vc)) : 0;
+      const topIds = maxVotes > 0 ? Object.keys(vc).filter(id => vc[id] === maxVotes) : Object.keys(vc);
+      room.voteRunoffIds     = topIds;
+      room.voteRound         = (room.voteRound || 0) + 1;
+      room.voteNeedsMajority = true;
+      room.votes             = {};
+      broadcast(room.code);
+      return; // Round stays alive — frontend re-renders the runoff vote.
+    }
+
+    // Strict majority found — resolve.
+    const caught = majorityId === room.liarId;
     room.players.forEach(p => {
       if (caught && p.id !== room.liarId && room.votes[p.id] === room.liarId) p.score += 100;
       if (!caught && p.id === room.liarId) p.score += 200;
     });
+    const voterIdsByTarget = {};
+    Object.entries(room.votes).forEach(([voter, target]) => {
+      voterIdsByTarget[target] = [...(voterIdsByTarget[target] || []), voter];
+    });
     const liarWinnerIds = caught
       ? room.players.filter(p => p.id !== room.liarId && room.votes[p.id] === room.liarId).map(p => p.id)
       : [room.liarId];
-    result = { liarCaught: caught, voteCounts: vc, topVotedIds, winnerIds: liarWinnerIds };
+    room.voteRunoffIds     = null;
+    room.voteNeedsMajority = false;
+    result = {
+      liarCaught: caught, voteCounts: vc, topVotedIds: [majorityId], winnerIds: liarWinnerIds,
+      majorityThreshold, resolvedByMajority: true, voterIdsByTarget, accusedId: majorityId,
+    };
   } else if (gt === "two_truths") {
     const sa = room.answers[room.spotlightId];
     // lieIndex is the 0-based index into the three statements that was the lie.
@@ -805,6 +835,8 @@ function handleDisconnect(code, playerId) {
     if (room._bomberMaxTimer) clearTimeout(room._bomberMaxTimer);
     if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
     if (room._spyfallTurnTimer) clearTimeout(room._spyfallTurnTimer);
+    if (room._mafiaDayTimer) clearTimeout(room._mafiaDayTimer);
+    if (room._mafiaVoteTimer) clearTimeout(room._mafiaVoteTimer);
     const { deleteRoom } = require("../store");
     deleteRoom(code);
     return;
@@ -828,6 +860,8 @@ function handleDisconnect(code, playerId) {
     if (room._bomberMaxTimer) clearTimeout(room._bomberMaxTimer);
     if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
     if (room._spyfallTurnTimer) clearTimeout(room._spyfallTurnTimer);
+    if (room._mafiaDayTimer) clearTimeout(room._mafiaDayTimer);
+    if (room._mafiaVoteTimer) clearTimeout(room._mafiaVoteTimer);
     return;
   }
 
@@ -850,6 +884,8 @@ function handleDisconnect(code, playerId) {
       if (room._bomberMaxTimer) clearTimeout(room._bomberMaxTimer);
       if (room._bingoCallTimer) clearTimeout(room._bingoCallTimer);
       if (room._spyfallTurnTimer) clearTimeout(room._spyfallTurnTimer);
+      if (room._mafiaDayTimer) clearTimeout(room._mafiaDayTimer);
+      if (room._mafiaVoteTimer) clearTimeout(room._mafiaVoteTimer);
       room.phase = "disbanded";
       room.disbandReason = "not_enough_players";
       broadcast(code);
@@ -894,14 +930,17 @@ function resolveMafiaMatch(room, winner) {
   const winningIds = winner === "mafia"
     ? room.players.filter(p => room.mafiaRoles[p.id] === "mafia").map(p => p.id)
     : room.mafiaAliveIds.filter(id => room.mafiaRoles[id] !== "mafia");
+
   winningIds.forEach(id => {
     const p = room.players.find(x => x.id === id);
     if (p) p.score += 250;
   });
+
   const pointDeltas = {};
   room.players.forEach(p => { pointDeltas[p.id] = p.score - (scoreBefore[p.id] ?? 0); });
   const topScore = Math.max(...room.players.map(p => p.score), 0);
   const firstPlaceIds = room.players.filter(p => p.score === topScore).map(p => p.id);
+
   room.roundResult = {
     winner,
     winnerIds: winningIds,
@@ -915,22 +954,17 @@ function resolveMafiaMatch(room, winner) {
       return p ? { id: p.id, name: p.name, avatar: p.avatar ?? null, score: p.score, delta: pointDeltas[id] ?? 0 } : { id };
     }),
   };
-  // Force next-round click to go to scoreboard (single-match game).
+
   room.round = room.maxRounds;
   room.phase = "results";
   broadcast(room.code);
 }
 
-/**
- * Resolve the night: compare kill vs doctor save, deliver detective result,
- * update alive/dead, then move to day_discussion with a 45 s auto-advance timer.
- */
 function resolveMafiaNight(room) {
   const targetId = room.mafiaNightTargetId;
   const savedId = room.mafiaDoctorSaveId;
   const saved = !!(targetId && targetId === savedId);
 
-  // Private detective result
   const detectiveId = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "detective");
   if (detectiveId && room.mafiaDetectiveCheckId) {
     const checkId = room.mafiaDetectiveCheckId;
@@ -958,15 +992,17 @@ function resolveMafiaNight(room) {
   if (winner) { resolveMafiaMatch(room, winner); return; }
 
   room.votes = {};
-  room.phase = "day_discussion"; broadcast(room.code);
-  // 45 s auto-advance to voting if host doesn't click first.
+  room.phase = "day_discussion";
+  broadcast(room.code);
+
   if (room._mafiaDayTimer) clearTimeout(room._mafiaDayTimer);
   room._mafiaDayTimer = setTimeout(() => {
     const r = getRoom(room.code);
     if (!r || r.phase !== "day_discussion" || r.gameType !== "mafia") return;
     r._mafiaDayTimer = null;
     r.votes = {};
-    r.phase = "voting"; broadcast(r.code);
+    r.phase = "voting";
+    broadcast(r.code);
     r._mafiaVoteTimer = setTimeout(() => {
       const rr = getRoom(r.code);
       if (!rr || rr.phase !== "voting" || rr.gameType !== "mafia") return;
@@ -975,40 +1011,35 @@ function resolveMafiaNight(room) {
   }, 45000);
 }
 
-/**
- * Transition to doctor_night. If no doctor is alive, skip straight.
- */
 function startMafiaDoctorPhase(room) {
   const aliveDoctor = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "doctor");
   if (!aliveDoctor) { startMafiaDetectivePhase(room); return; }
-  room.phase = "doctor_night"; broadcast(room.code);
+  room.phase = "doctor_night";
+  broadcast(room.code);
 }
 
-/**
- * Transition to detective_night. If no detective is alive, skip straight.
- */
 function startMafiaDetectivePhase(room) {
   const aliveDetective = room.mafiaAliveIds.find(id => room.mafiaRoles[id] === "detective");
   if (!aliveDetective) { resolveMafiaNight(room); return; }
-  room.phase = "detective_night"; broadcast(room.code);
+  room.phase = "detective_night";
+  broadcast(room.code);
 }
 
-/**
- * Resolve the day vote. Eliminate the player with unique plurality.
- * If tied: no elimination. Then check win condition or loop to next night.
- */
 function resolveMafiaDay(room) {
   if (room._mafiaVoteTimer) { clearTimeout(room._mafiaVoteTimer); room._mafiaVoteTimer = null; }
   const vc = {};
   room.mafiaAliveIds.forEach(id => { vc[id] = 0; });
+
   Object.entries(room.votes).forEach(([voterId, targetId]) => {
     if (room.mafiaAliveIds.includes(voterId) && targetId) {
       vc[targetId] = (vc[targetId] || 0) + 1;
     }
   });
+
   const max = Math.max(...Object.values(vc), 0);
   const topIds = Object.keys(vc).filter(id => vc[id] === max && max > 0);
   const eliminatedId = topIds.length === 1 ? topIds[0] : null;
+
   if (eliminatedId) {
     room.mafiaAliveIds = room.mafiaAliveIds.filter(id => id !== eliminatedId);
     room.mafiaDeadIds.push(eliminatedId);
@@ -1016,15 +1047,17 @@ function resolveMafiaDay(room) {
   } else {
     room.mafiaEliminatedId = null;
   }
+
   const winner = checkMafiaWin(room);
   if (winner) { resolveMafiaMatch(room, winner); return; }
-  // Loop: reset and start next night.
+
   room.mafiaNightTargetId = null;
   room.mafiaDoctorSaveId = null;
   room.mafiaDetectiveCheckId = null;
   room.votes = {};
   room.mafiaRoundSummary = null;
-  room.phase = "mafia_night"; broadcast(room.code);
+  room.phase = "mafia_night";
+  broadcast(room.code);
 }
 
 module.exports = {

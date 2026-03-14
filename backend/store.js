@@ -17,7 +17,7 @@ function createRoom(hostName, avatar) {
   rooms[code] = {
     code,
     host: playerId,
-    players: [{ id: playerId, name: hostName, avatar: avatar || null, score: 0, isHost: true }],
+    players: [{ id: playerId, name: hostName, avatar: avatar || null, score: 0, isHost: true, micEnabled: false, micMuted: true, micPermission: "unknown" }],
     phase: "lobby",
     gameType: null,
     round: 0,
@@ -33,6 +33,15 @@ function createRoom(hostName, avatar) {
     usedQuestions: [],
     roundResult: null,
     triviaCorrectIndex: null,
+    voteRunoffIds: null,
+    voteRound: 0,
+    voteNeedsMajority: false,
+    mafiaAliveIds: [],
+    mafiaDeadIds: [],
+    mafiaEliminatedId: null,
+    mafiaRoundSummary: null,
+    mafiaRoles: null,
+    mafiaWinner: null,
   };
   return { playerId, room: rooms[code] };
 }
@@ -77,6 +86,10 @@ function sanitize(room) {
       avatar: p.avatar || null,
       hasAnswered: room.answers[p.id] !== undefined,
       hasVoted: room.votes[p.id] !== undefined,
+      isAlive: room.mafiaAliveIds ? room.mafiaAliveIds.includes(p.id) : true,
+      micEnabled: p.micEnabled ?? false,
+      micMuted: p.micMuted ?? true,
+      micPermission: p.micPermission ?? "unknown",
     })),
     phase: room.phase,
     gameType: room.gameType,
@@ -92,6 +105,9 @@ function sanitize(room) {
     matchGuesses: room.matchGuesses,
     answerCount: Object.keys(room.answers).length,
     voteCount: Object.keys(room.votes).length,
+    voteRunoffIds: room.voteRunoffIds ?? null,
+    voteRound: room.voteRound ?? 0,
+    voteNeedsMajority: room.voteNeedsMajority ?? false,
     roundResult: room.roundResult,
     // Trivia
     triviaStartTime: room.triviaStartTime ?? null,
@@ -129,10 +145,8 @@ function sanitize(room) {
     mafiaAliveIds: room.mafiaAliveIds ?? [],
     mafiaDeadIds: room.mafiaDeadIds ?? [],
     mafiaEliminatedId: room.mafiaEliminatedId ?? null,
-    // Night summary only visible from day discussion onward
     mafiaRoundSummary: ["day_discussion", "voting", "results"].includes(room.phase)
       ? (room.mafiaRoundSummary ?? null) : null,
-    // Full role reveal only at results
     mafiaRoleReveal: room.phase === "results" ? (room.mafiaRoles ?? null) : null,
     mafiaWinner: room.mafiaWinner ?? null,
     // Room lifecycle

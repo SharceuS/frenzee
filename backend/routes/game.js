@@ -84,6 +84,14 @@ router.post("/:code/vote", withRoom, (req, res) => {
   const { playerId, targetId } = req.body;
   if (room.phase !== "voting") return res.status(400).json({ ok: false, error: "Not voting phase" });
   if (room.gameType === "guess_the_liar" && playerId === targetId) return res.status(400).json({ ok: false });
+  // Vote lock: once submitted for the current vote round, a liar-game vote cannot be changed.
+  if (room.gameType === "guess_the_liar" && room.votes[playerId] !== undefined) {
+    return res.status(400).json({ ok: false, error: "Vote already locked" });
+  }
+  // Runoff validation: during a runoff only runoff candidates are valid targets.
+  if (room.gameType === "guess_the_liar" && room.voteRunoffIds && !room.voteRunoffIds.includes(targetId)) {
+    return res.status(400).json({ ok: false, error: "Target is not in the runoff" });
+  }
   if (room.gameType === "spyfall" && playerId === targetId) return res.status(400).json({ ok: false, error: "Cannot vote for yourself" });
   if (room.gameType === "mafia") {
     const alive = room.mafiaAliveIds || [];

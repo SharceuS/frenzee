@@ -182,64 +182,42 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                 {gt === "guess_the_liar" && (
                     <>
                         <p className="font-nunito text-white/45 text-xs uppercase tracking-widest">📝 Answers revealed</p>
-                        {answers.map((a, i) => {
-                            const isLiar = a.playerId === room.liarId;
-                            return (
-                                <motion.div key={a.playerId}
-                                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
-                                    className={`answer-card ${isLiar ? "border-red-500/50 bg-red-500/08" : "border-green-500/25"}`}
-                                    style={{ borderColor: isLiar ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.25)" }}>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-nunito font-extrabold text-white text-sm">{a.playerName}</span>
-                                        {isLiar && <span className="badge badge-original" style={{ background: "rgba(239,68,68,0.2)", color: "#F87171", borderColor: "rgba(239,68,68,0.35)" }}>🤥 Liar</span>}
-                                    </div>
-                                    <p className="font-nunito text-white/80 text-sm">{a.answer as string}</p>
-                                </motion.div>
-                            );
-                        })}
-                        {room.votes && (
-                            <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">🗳️ Votes</p>
-                        )}
-                        {room.votes && (
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {room.players.map((v, i) => {
-                                    if (!room.votes![v.id]) return null;
-                                    const correct = room.votes![v.id] === room.liarId;
-                                    return (
-                                        <motion.div key={v.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 + i * 0.05 }}
-                                            className={`vote-card flex items-center gap-2 ${correct ? "correct" : "wrong"}`}
-                                            style={{ padding: "10px 12px", minHeight: 0 }}>
-                                            <div className="flex flex-col flex-1 min-w-0">
-                                                <span className="font-nunito font-bold text-white text-sm truncate">{v.name}</span>
-                                                <span className="font-nunito text-white/50 text-xs truncate">→ {getName(room.votes![v.id])}</span>
-                                            </div>
-                                            <span className="flex-shrink-0">{correct ? "✅" : "❌"}</span>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        {/* Points this round */}
-                        <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mt-1">⭐ Points this round</p>
-                        <div className="grid grid-cols-2 gap-1.5">
-                            {room.players.map((v, i) => {
-                                const isLiar = v.id === room.liarId;
-                                const caught = rr.liarCaught as boolean;
-                                let pts = 0;
-                                if (isLiar && !caught) pts = 200;
-                                else if (!isLiar && room.votes?.[v.id] === room.liarId) pts = 100;
-                                if (pts === 0) return null;
+                        {(() => {
+                            const voteCounts = (rr.voteCounts as Record<string, number>) ?? {};
+                            const voterIdsByTarget = (rr.voterIdsByTarget as Record<string, string[]>) ?? {};
+                            return answers.map((a, i) => {
+                                const isLiar = a.playerId === room.liarId;
+                                const vCount = voteCounts[a.playerId] ?? 0;
+                                const voterNames = (voterIdsByTarget[a.playerId] ?? []).map(id => getName(id));
                                 return (
-                                    <motion.div key={v.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 + i * 0.05 }}
-                                        className="vote-card flex items-center gap-2"
-                                        style={{ padding: "10px 12px", minHeight: 0 }}>
-                                        <span className="font-nunito font-bold text-white text-sm truncate flex-1">{v.name}</span>
-                                        <span className="font-fredoka text-amber-400 flex-shrink-0">+{pts}</span>
-                                        <span className="flex-shrink-0">{isLiar ? "😈" : "🔍"}</span>
+                                    <motion.div key={a.playerId}
+                                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
+                                        className={`answer-card ${isLiar ? "border-red-500/50 bg-red-500/08" : "border-green-500/25"}`}
+                                        style={{ borderColor: isLiar ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.25)" }}>
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="font-nunito font-extrabold text-white text-sm">{a.playerName}</span>
+                                                    {isLiar && <span className="badge badge-original" style={{ background: "rgba(239,68,68,0.2)", color: "#F87171", borderColor: "rgba(239,68,68,0.35)" }}>🤥 Liar</span>}
+                                                </div>
+                                                <p className="font-nunito text-white/80 text-sm">{a.answer as string}</p>
+                                                {voterNames.length > 0 && (
+                                                    <p className="font-nunito text-white/35 text-xs mt-1.5">
+                                                        Voted by: {voterNames.join(", ")}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {/* Vote count badge */}
+                                            {vCount > 0 && (
+                                                <div style={{ flexShrink: 0, minWidth: 32, height: 32, borderRadius: 10, background: isLiar ? "rgba(239,68,68,0.18)" : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", border: isLiar ? "1px solid rgba(239,68,68,0.35)" : "1px solid rgba(255,255,255,0.12)" }}>
+                                                    <span className="font-fredoka text-white text-base leading-none">{vCount}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </motion.div>
                                 );
-                            })}
-                        </div>
+                            });
+                        })()}
                     </>
                 )}
 
@@ -766,18 +744,40 @@ export default function ResultsScreen({ room, myId, isHost, onNext }: Props) {
                 {/* Scores */}
                 <div className="party-card p-4 mt-1">
                     <p className="font-nunito text-white/45 text-xs uppercase tracking-widest mb-3">🏆 Leaderboard</p>
-                    {sortedPlayers.map((p, i) => (
-                        <motion.div key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 + i * 0.06 }}
-                            className={`flex items-center gap-3 py-2.5 px-2 rounded-xl transition-all ${p.id === myId ? "bg-white/06" : ""}`}
-                            style={{ background: p.id === myId ? "rgba(255,255,255,0.06)" : undefined }}>
-                            <span className="font-nunito text-white/40 text-sm w-4">{i + 1}</span>
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center font-fredoka text-sm text-white">
-                                {p.name[0].toUpperCase()}
-                            </div>
-                            <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
-                            <span className="font-fredoka text-amber-400 text-lg">{p.score}</span>
-                        </motion.div>
-                    ))}
+                    {(() => {
+                        // Compute point deltas: prefer rr.pointDeltas, else estimate from guess_the_liar logic
+                        const rrDeltas = rr.pointDeltas as Record<string, number> | undefined;
+                        const computedDeltas: Record<string, number> = {};
+                        if (gt === "guess_the_liar" && !rrDeltas) {
+                            const caught = rr.liarCaught as boolean;
+                            for (const p of room.players) {
+                                const isLiar = p.id === room.liarId;
+                                if (isLiar && !caught) computedDeltas[p.id] = 200;
+                                else if (!isLiar && room.votes?.[p.id] === room.liarId) computedDeltas[p.id] = 100;
+                            }
+                        }
+                        const deltas = rrDeltas ?? computedDeltas;
+                        return sortedPlayers.map((p, i) => {
+                            const delta = deltas[p.id];
+                            return (
+                                <motion.div key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 + i * 0.06 }}
+                                    className={`flex items-center gap-3 py-2.5 px-2 rounded-xl transition-all ${p.id === myId ? "bg-white/06" : ""}`}
+                                    style={{ background: p.id === myId ? "rgba(255,255,255,0.06)" : undefined }}>
+                                    <span className="font-nunito text-white/40 text-sm w-4">{i + 1}</span>
+                                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center font-fredoka text-sm text-white">
+                                        {p.name[0].toUpperCase()}
+                                    </div>
+                                    <span className="font-fredoka text-white text-base flex-1">{p.name}</span>
+                                    <div className="flex items-baseline gap-1.5">
+                                        {delta != null && delta > 0 && (
+                                            <span className="font-nunito font-extrabold text-green-400 text-xs">+{delta}</span>
+                                        )}
+                                        <span className="font-fredoka text-amber-400 text-lg">{p.score}</span>
+                                    </div>
+                                </motion.div>
+                            );
+                        });
+                    })()}
                 </div>
             </div>
 

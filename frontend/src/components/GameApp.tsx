@@ -7,6 +7,7 @@ import {
   apiNextRound, apiPlayAgain,
   apiSpyfallDiscuss, apiSpyfallAccuse, apiSpyfallGuess,
   apiMafiaNightKill, apiMafiaDoctorSave, apiMafiaDetectiveCheck, apiMafiaDayStart,
+  apiUpdateProfile, apiUpdateMic,
 } from "@/lib/api";
 import { Room, Phase, SpyfallRole, MafiaRole, DetectiveResult } from "@/lib/types";
 import { AnimatePresence, motion } from "framer-motion";
@@ -30,6 +31,7 @@ import ReactionTapScreen from "./screens/ReactionTapScreen";
 import BingoScreen from "./screens/BingoScreen";
 import SpyfallScreen from "./screens/SpyfallScreen";
 import MafiaScreen from "./screens/MafiaScreen";
+import MicPill from "@/components/MicPill";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -68,6 +70,11 @@ export default function GameApp() {
     const [playerLeftMsg, setPlayerLeftMsg] = useState("");
     const [isConnectingRoom, setIsConnectingRoom] = useState(false);
     const prevPlayersRef = useRef<Map<string, string>>(new Map());
+
+    // ── Mic state ─────────────────────────────────────────────────────────────
+    const [micEnabled, setMicEnabled] = useState(false);
+    const [micMuted, setMicMuted] = useState(true);
+    const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
 
     const phase: Phase = room?.phase ?? "home";
     const isHost = room?.host === myId;
@@ -183,6 +190,7 @@ export default function GameApp() {
             spyfallAccusedId: null, spyfallSpyId: null, spyfallLocation: null, spyfallGuess: null, spyfallLocationNames: null,
             mafiaAliveIds: [], mafiaDeadIds: [], mafiaEliminatedId: null,
             mafiaRoundSummary: null, mafiaRoleReveal: null, mafiaWinner: null,
+            voteRunoffIds: null, voteRound: 0, voteNeedsMajority: false,
         } as Room);
 
         const res = await apiCreateRoom(name, avatar);
@@ -247,6 +255,44 @@ export default function GameApp() {
         if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); setMyMafiaRole(null); setDetectiveResult(null); apiPlayAgain(room.code, myId); }
     }, [room, myId]);
 
+    // ── Mic handlers ─────────────────────────────────────────────────────────
+    const handleToggleMic = useCallback(async () => {
+        if (!room) return;
+        if (!micEnabled) {
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                setMicEnabled(true);
+                setMicMuted(false);
+                setMicPermission("granted");
+                apiUpdateMic(room.code, myId, true, false, "granted");
+            } catch {
+                setMicPermission("denied");
+                apiUpdateMic(room.code, myId, false, true, "denied");
+            }
+        } else {
+            setMicEnabled(false);
+            setMicMuted(true);
+            apiUpdateMic(room.code, myId, false, true, micPermission);
+        }
+    }, [room, myId, micEnabled, micPermission]);
+
+    const handleToggleMute = useCallback(() => {
+        if (!room || !micEnabled) return;
+        const next = !micMuted;
+        setMicMuted(next);
+        apiUpdateMic(room.code, myId, true, next, "granted");
+    }, [room, myId, micEnabled, micMuted]);
+
+    const handleUpdateProfile = useCallback(async (avatar: import("@/lib/types").AvatarConfig) => {
+        if (!room) return;
+        await apiUpdateProfile(room.code, myId, avatar);
+        // Optimistic local update while waiting for SSE room_update
+        setRoom(r => r ? {
+            ...r,
+            players: r.players.map(p => p.id === myId ? { ...p, avatar } : p),
+        } : r);
+    }, [room, myId]);
+
     // ── Screen router ────────────────────────────────
     // Lobby key must NOT include gameType — selecting a game would remount the whole screen & reset tab state
     // Mafia cycles multiple rounds within round=1, so key off dead-count instead
@@ -260,6 +306,19 @@ export default function GameApp() {
 
     return (
         <div className="relative" style={{ isolation: "isolate" }}>
+            {/* Floating mic pill for active game phases */}
+            {micEnabled && ACTIVE_GAME_PHASES.has(phase) && (
+                <div style={{ position: "fixed", bottom: 80, right: 16, zIndex: 45 }}>
+                    <MicPill
+                        micEnabled={micEnabled}
+                        micMuted={micMuted}
+                        micPermission={micPermission}
+                        onToggleEnable={handleToggleMic}
+                        onToggleMute={handleToggleMute}
+                        compact
+                    />
+                </div>
+            )}
             <AnimatePresence>
                 {errorMsg && (
                     <motion.div
@@ -301,7 +360,11 @@ export default function GameApp() {
 
                     {phase === "lobby" && room && (
                         <LobbyScreen room={room} myId={myId} isHost={isHost}
-                            onSelectGame={selectGame} onStart={startGame} />
+                            onSelectGame={selectGame} onStart={startGame}
+                            onUpdateProfile={handleUpdateProfile}
+                            micEnabled={micEnabled} micMuted={micMuted} micPermission={micPermission}
+                            onToggleMic={handleToggleMic} onToggleMute={handleToggleMute}
+                        />
                     )}
 
                     {phase === "question" && room && gt !== "spyfall" && gt !== "mafia" && (

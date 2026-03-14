@@ -12,7 +12,6 @@ interface Props {
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-const RANK_LABELS = ["1st", "2nd", "3rd"];
 
 function BossCrown() {
     return (
@@ -49,14 +48,15 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
     }, []);
 
     return (
-        <div className="page-fill overflow-y-auto gap-6 px-5 py-8 pb-28">
-            {/* Trophy — overflow-visible so emoji doesn't get cut */}
+        <div className="page-fill" style={{ gap: 0 }}>
+            {/* Trophy + Hero — fixed above the scrollable list */}
+            <div className="flex-shrink-0 px-5 pt-8 pb-4">
             <motion.div
                 initial={{ scale: 0, rotate: -20 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 220, damping: 12 }}
                 className="text-center overflow-visible"
-                style={{ overflowClipMargin: "unset", marginTop: "50px" }}
+                style={{ overflowClipMargin: "unset", marginTop: "10px" }}
             >
                 <div className="text-8xl animate-bounce-slow" style={{ lineHeight: 1.2, display: "inline-block" }}>🏆</div>
                 <h1 className="font-fredoka text-5xl text-white mt-2">Game Over!</h1>
@@ -96,7 +96,7 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
                                         </motion.div>
                                     )}
                                     <div style={{
-                                        width: 72, height: 72, borderRadius: 22, overflow: "hidden",
+                                        width: 72, height: 72, borderRadius: "50%", overflow: "hidden",
                                         boxShadow: `0 0 0 3px ${pal.bg1}88, 0 6px 24px rgba(0,0,0,0.5)`,
                                     }}>
                                         <SvgAvatar config={avatarCfg} size={72} />
@@ -126,19 +126,17 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
                         {isAllTied ? "Everyone wins! 🎉" : isSolo ? "You won! 🎉" : "You tied for first! 🎉"}
                     </p>
                 ) : (
-                    <p className="font-nunito text-white/50 text-base mt-3">
-                        {isAllTied
-                            ? "Everyone wins! 🎉"
-                            : winners.length > 3
-                                ? `${winners.length} players tied for first!`
-                                : isSolo
-                                    ? `${winners[0]?.name} wins! 🎉`
-                                    : `${winners.map(w => w.name).join(" & ")} tied for first!`}
-                    </p>
+                    !isAllTied && winners.length > 1 && (
+                        <p className="font-nunito text-white/50 text-base mt-3">
+                            {winners.map(w => w.name).join(" & ")} tied for first!
+                        </p>
+                    )
                 )}
             </motion.div>
+            </div>{/* end hero wrapper */}
 
-            {/* Podium */}
+            {/* Scrollable rankings */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 pb-24">
             <motion.div
                 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
                 className="party-card w-full p-4"
@@ -146,42 +144,39 @@ export default function ScoreboardScreen({ room, myId, isHost, onPlayAgain }: Pr
                 <p className="font-nunito text-white/50 text-xs uppercase tracking-widest mb-4 text-center">
                     Final Rankings
                 </p>
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                     {sorted.map((p, i) => (
                         <motion.div
                             key={p.id}
                             initial={{ opacity: 0, x: -30 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.2 + i * 0.08 }}
-                            className={`flex items-center gap-4 px-4 py-3 rounded-2xl
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl
                 ${i === 0 ? "bg-yellow-400/15 border border-yellow-400/30" :
                                     i === 1 ? "bg-white/8 border border-white/15" :
                                         i === 2 ? "bg-orange-800/15 border border-orange-800/25" :
                                             "bg-white/4 border border-white/8"
                                 }`}
                         >
-                            <span className="text-3xl w-9 text-center">
+                            <span className="text-2xl w-8 text-center">
                                 {i < 3 ? MEDALS[i] : `${i + 1}.`}
                             </span>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                    <span className={`font-fredoka text-xl ${p.id === myId ? "text-purple-300" : "text-white"}`}>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`font-fredoka text-lg leading-tight ${p.id === myId ? "text-purple-300" : "text-white"}`}>
                                         {p.name}
                                     </span>
-                                    {p.id === myId && <span className="font-nunito text-xs text-white/30">(you)</span>}
+                                    {p.id === myId && <span className="font-nunito text-[10px] text-white/30">(you)</span>}
                                 </div>
-                                {i < 3 && (
-                                    <span className="font-nunito text-white/40 text-xs">{RANK_LABELS[i]} place</span>
-                                )}
                             </div>
-                            <div className="text-right">
-                                <div className="font-fredoka text-2xl text-yellow-400">{p.score}</div>
-                                <div className="font-nunito text-white/30 text-xs">pts</div>
-                            </div>
+                            <span className="font-fredoka text-amber-400 text-xl flex-shrink-0">
+                                {p.score}<span className="font-nunito text-white/30 text-xs ml-0.5">pts</span>
+                            </span>
                         </motion.div>
                     ))}
                 </div>
             </motion.div>
+            </div>{/* end scrollable rankings */}
 
             {/* Fixed footer: play again */}
             <motion.div

@@ -114,6 +114,15 @@ export async function apiSpyfallAccuse(code: string, playerId: string) {
 export async function apiSpyfallGuess(code: string, playerId: string, guess: string) {
   return post<{ ok: boolean; error?: string }>(`/rooms/${code}/spyfall/guess`, { playerId, guess });
 }
+// ── Profile & mic ───────────────────────────────
+export async function apiUpdateProfile(code: string, playerId: string, avatar: import("./types").AvatarConfig, name?: string) {
+  return post<{ ok: boolean; error?: string }>(`/rooms/${code}/profile`, { playerId, avatar, name });
+}
+
+export async function apiUpdateMic(code: string, playerId: string, micEnabled: boolean, micMuted: boolean, micPermission: string) {
+  return post<{ ok: boolean }>(`/rooms/${code}/mic`, { playerId, micEnabled, micMuted, micPermission });
+}
+
 // ── Mafia ───────────────────────────────────────────
 export async function apiMafiaNightKill(code: string, playerId: string, targetId: string) {
   return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/night-kill`, { playerId, targetId });

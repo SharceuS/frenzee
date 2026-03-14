@@ -58,6 +58,10 @@ export interface Player {
   avatar?: AvatarConfig;
   hasAnswered?: boolean;
   hasVoted?: boolean;
+  // Mic state (synced from backend)
+  micEnabled?: boolean;
+  micMuted?: boolean;
+  micPermission?: "unknown" | "granted" | "denied";
   // Bomberman
   bomberX?: number | null;
   bomberY?: number | null;
@@ -94,6 +98,9 @@ export interface Room {
   matchGuesses: Record<string, Record<string, string>>;
   answerCount: number;
   voteCount: number;
+  voteRunoffIds: string[] | null;
+  voteRound: number;
+  voteNeedsMajority: boolean;
   roundResult: Record<string, unknown> | null;
   disbandReason: "host_left" | "not_enough_players" | null;
   // Trivia Blitz
