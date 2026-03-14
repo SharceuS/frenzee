@@ -1,5 +1,5 @@
 "use client";
-// ── SSE Context — replaces socket.tsx ────────────────────────────────────────
+// ── SSE Context ───────────────────────────────────────────────────────────────
 import {
   createContext, useContext, useEffect, useRef,
   useState, useMemo, useCallback, ReactNode,
@@ -25,6 +25,11 @@ const SSE_EVENTS = [
   "your_mafia_role",
   "detective_result",
   "error_msg",
+  "voice_peer_joined",
+  "voice_peer_left",
+  "voice_offer",
+  "voice_answer",
+  "voice_ice_candidate",
 ] as const;
 
 type SseEventName = typeof SSE_EVENTS[number];

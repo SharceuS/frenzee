@@ -824,6 +824,14 @@ function handleDisconnect(code, playerId) {
   room.players.splice(idx, 1);
   if (room.bomberInputs) delete room.bomberInputs[playerId];
 
+  // ── Voice: remove from participant set and notify remaining peers ──────────
+  if (room.voiceParticipantIds && room.voiceParticipantIds.includes(playerId)) {
+    room.voiceParticipantIds = room.voiceParticipantIds.filter(id => id !== playerId);
+    for (const peerId of room.voiceParticipantIds) {
+      sseSend(code, peerId, "voice_peer_left", { fromPlayerId: playerId });
+    }
+  }
+
   // ── Empty room: tear down all timers and delete ───────────────────────────
   if (room.players.length === 0) {
     if (room._triviaTimer) clearTimeout(room._triviaTimer);

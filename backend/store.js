@@ -36,6 +36,7 @@ function createRoom(hostName, avatar) {
     voteRunoffIds: null,
     voteRound: 0,
     voteNeedsMajority: false,
+    voiceParticipantIds: [],
     mafiaAliveIds: [],
     mafiaDeadIds: [],
     mafiaEliminatedId: null,
@@ -152,6 +153,7 @@ function sanitize(room) {
     // Room lifecycle
     // phase "disbanded" means the room is gone and every client should return home.
     disbandReason: room.disbandReason ?? null,     // null | "host_left" | "not_enough_players"
+    voiceParticipantIds: room.voiceParticipantIds ?? [],
   };
 }
 

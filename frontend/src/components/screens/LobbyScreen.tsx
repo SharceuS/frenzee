@@ -24,9 +24,40 @@ interface Props {
     onToggleMute: () => void;
 }
 
+// Per-game image focal point (objectPosition)
+const GAME_ART_POSITION: Record<string, string> = {
+    guess_the_liar:       "center 20%",
+    two_truths:           "center 10%",
+    most_likely_to:       "center 10%",
+    never_have_i_ever:    "center 0%",
+    would_you_rather:     "center 10%",
+    hot_takes:            "center 20%",
+    roast_room:           "center 5%",
+    finish_the_sentence:  "center 5%",
+    confessions:          "center 0%",
+    pick_your_poison:     "center 10%",
+    debate_pit:           "center 5%",
+    word_association:     "center 5%",
+    word_bomb:            "center 10%",
+    trivia_blitz:         "center 10%",
+};
+
 // Games that have portrait art assets
 const GAME_ART_MAP: Record<string, string> = {
-    guess_the_liar: "/images/games/findtheliar.jpg",
+    guess_the_liar:       "/images/games/findtheliar.jpg",
+    two_truths:           "/images/games/twotruthsandalie.jpg",
+    most_likely_to:       "/images/games/mostlikelyto.jpg",
+    never_have_i_ever:    "/images/games/neverhaveiever.jpg",
+    would_you_rather:     "/images/games/wouldyourather.jpg",
+    hot_takes:            "/images/games/hottakes.jpg",
+    roast_room:           "/images/games/roastbattle.jpg",
+    finish_the_sentence:  "/images/games/finishthesentence.jpg",
+    confessions:          "/images/games/annonymousconfessions.jpg",
+    pick_your_poison:     "/images/games/pickyourpoison.jpg",
+    debate_pit:           "/images/games/debatebattle.jpg",
+    word_association:     "/images/games/wordassociation.jpg",
+    word_bomb:            "/images/games/wordbomb.jpg",
+    trivia_blitz:         "/images/games/triviabattle.jpg",
 };
 
 const CAT_PILLS: Record<string, { label: string; color: string }> = {
@@ -369,7 +400,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart,
                 </div>
 
                 {/* ─── Players row ─── */}
-                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0" style={{ scrollbarWidth: "none", padding: "5px" }}>
+                <div className="flex gap-2 overflow-x-auto pb-2 flex-shrink-0" style={{ scrollbarWidth: "none", padding: "5px", paddingTop: 14 }}>
                     <AnimatePresence mode="popLayout">
                         {room.players.map((p, i) => (
                             <motion.div key={p.id}
@@ -380,7 +411,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart,
                                 className="flex flex-col items-center gap-1.5 flex-shrink-0">
                                 {/* Avatar + HOST badge */}
                                 <div className="relative">
-                                    {p.isHost && <div className="host-badge">👑 HOST</div>}
+                                    {p.isHost && <div className="host-badge">HOST</div>}
                                     <div
                                         className={`w-12 h-12 rounded-2xl overflow-hidden${p.id === myId ? " cursor-pointer active:scale-90 transition-transform" : ""}`}
                                         onClick={p.id === myId ? () => setEditingAvatar(true) : undefined}
@@ -415,19 +446,25 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart,
                     <div className="px-1 pt-1">
 
                         {/* Active games — portrait art cards */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2" style={{ rowGap: 26, columnGap: 12 }}>
                             {activeGames.map(g => {
                                 const isSelected = selected === g.id;
                                 const pill = CAT_PILLS[g.cat];
                                 const artSrc = GAME_ART_MAP[g.id];
+                                const artPos = GAME_ART_POSITION[g.id] ?? "center 30%";
                                 return (
-                                    <div key={g.id} style={{ position: "relative", borderRadius: 21 }}>
-                                        {/* Rotating heat glow behind card */}
-                                        <div className="game-portrait-glow" style={{ opacity: isSelected ? 1 : 0.45 }} />
-                                        {/* Card */}
+                                    <div key={g.id} className={`gpc-wrapper${isSelected ? " gpc-selected" : ""}`} style={{ position: "relative", padding: "4px", margin: "-4px" }}>
+                                        {/* Card — neon glow via box-shadow */}
                                         <div
-                                            className={`game-portrait-card${isSelected ? " gpc-selected" : ""}`}
-                                            style={{ position: "relative", zIndex: 1, height: 175 }}
+                                            className={`game-portrait-card${isSelected ? " gpc-inset" : ""}`}
+                                            style={{
+                                                position: "relative", zIndex: 1, height: 200, overflow: "hidden",
+                                                border: isSelected ? "2px solid rgba(255,255,255,0.95)" : "2px solid rgba(255,255,255,0.5)",
+                                                borderRadius: 18,
+                                                boxShadow: "none",
+                                                cursor: isHost ? "pointer" : "default",
+                                                transition: "box-shadow 0.22s, border-color 0.22s",
+                                            }}
                                             onClick={() => {
                                                 if (!isHost) return;
                                                 sfxSelect();
@@ -437,7 +474,7 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart,
                                             {/* Art or fallback fill */}
                                             {artSrc ? (
                                                 <img src={artSrc} alt={g.title}
-                                                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "saturate(0.22) contrast(1.08)" }} />
+                                                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: artPos, filter: isSelected ? "none" : "saturate(0.1) contrast(1.2)", transition: "filter 0.22s" }} />
                                             ) : (
                                                 <div style={{
                                                     position: "absolute", inset: 0,
@@ -450,23 +487,38 @@ export default function LobbyScreen({ room, myId, isHost, onSelectGame, onStart,
                                             )}
                                             {/* Bottom gradient overlay */}
                                             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 50%)", pointerEvents: "none", zIndex: 2 }} />
-                                            {/* Category label bottom-left */}
-                                            <div style={{ position: "absolute", bottom: 8, left: 9, zIndex: 3, fontFamily: "'Nunito', sans-serif", fontSize: 8.5, fontWeight: 900, color: pill.color, backgroundColor: pill.color + "28", padding: "2px 6px", borderRadius: 99, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                                                {pill.label}
-                                            </div>
-                                            {/* Info button top-right */}
-                                            <button
-                                                onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
-                                                style={{ position: "absolute", top: 7, right: 7, zIndex: 10, width: 23, height: 23, borderRadius: "50%", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", border: "1px solid rgba(255,255,255,0.28)", color: "rgba(255,255,255,0.8)", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                                                ℹ
-                                            </button>
-                                            {/* Selected check top-left */}
-                                            {isSelected && (
-                                                <div style={{ position: "absolute", top: 7, left: 7, zIndex: 10, width: 22, height: 22, borderRadius: "50%", background: g.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", fontWeight: "bold" }}>
-                                                    ✓
-                                                </div>
-                                            )}
                                         </div>
+
+                                        {/* Category pill — bottom center, sitting over the border */}
+                                        <div style={{
+                                            position: "absolute", bottom: -3, left: "50%", transform: "translateX(-50%)",
+                                            zIndex: 5, whiteSpace: "nowrap",
+                                            fontFamily: "'Nunito', sans-serif", fontSize: 8.5, fontWeight: 900,
+                                            color: pill.color,
+                                            backgroundColor: "rgba(10,6,22,0.9)",
+                                            padding: "2px 8px", borderRadius: 99,
+                                            border: `1px solid ${pill.color}60`,
+                                            letterSpacing: "0.06em", textTransform: "uppercase",
+                                            backdropFilter: "blur(6px)",
+                                        }}>
+                                            {pill.label}
+                                        </div>
+
+                                        {/* Info button — top right, visible */}
+                                        <button
+                                            onClick={e => { e.stopPropagation(); sfxTap(); setInfoGame(g); }}
+                                            style={{
+                                                position: "absolute", top: 12, right: 12, zIndex: 10,
+                                                width: 22, height: 22, borderRadius: "50%",
+                                                background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)",
+                                                border: "1.5px solid rgba(255,255,255,0.65)",
+                                                color: "white", fontSize: 12, fontWeight: 700,
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                cursor: "pointer",
+                                            }}>
+                                            ℹ
+                                        </button>
+
                                     </div>
                                 );
                             })}

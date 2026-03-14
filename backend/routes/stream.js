@@ -1,7 +1,7 @@
 // ── SSE Stream Endpoint ───────────────────────────────────────────────────────
 const { Router } = require("express");
 const { getRoom, sanitize } = require("../store");
-const { sseAdd, sseSend } = require("../sse");
+const { sseAdd, sseSend, schedulePendingDisconnect, cancelPendingDisconnect } = require("../sse");
 const { handleDisconnect } = require("../games/rounds");
 
 const router = Router();
@@ -18,6 +18,11 @@ router.get("/:code", (req, res) => {
     return res.status(403).json({ error: "Not a member of this room" });
   }
 
+  // ── Cancel any pending grace-window disconnect for this player ────────────
+  // This covers mobile reconnects: the old stream closed but the grace timer
+  // had not fired yet, so the player is still a room member.
+  cancelPendingDisconnect(code, playerId);
+
   // SSE headers
   res.set({
     "Content-Type": "text/event-stream",
@@ -28,7 +33,7 @@ router.get("/:code", (req, res) => {
   });
   res.flushHeaders();
 
-  // Register + get cleanup fn
+  // Register + get cleanup fn (replaces any stale stream for this player)
   const cleanup = sseAdd(code, playerId, res);
 
   // Send current state immediately so the client renders right away
@@ -36,8 +41,14 @@ router.get("/:code", (req, res) => {
 
   req.on("close", () => {
     cleanup();
-    handleDisconnect(code, playerId);
+    // ── Grace window: defer real disconnect to allow mobile reconnects ──────
+    // Only run handleDisconnect after RECONNECT_GRACE_MS if the player has
+    // not opened a new stream in the meantime.
+    schedulePendingDisconnect(code, playerId, () => {
+      handleDisconnect(code, playerId);
+    });
   });
 });
 
 module.exports = router;
+

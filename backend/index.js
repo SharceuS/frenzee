@@ -8,6 +8,7 @@ const streamRouter = require("./routes/stream");
 const roomsRouter  = require("./routes/rooms");
 const gameRouter   = require("./routes/game");
 const arcadeRouter = require("./routes/arcade");
+const voiceRouter  = require("./routes/voice");
 const { handleBomberUpgrade } = require("./games/bomberWs");
 
 const app = express();
@@ -24,6 +25,7 @@ app.use("/stream", streamRouter);   // GET  /stream/:code?playerId=xxx
 app.use("/rooms",  roomsRouter);    // POST /rooms, POST /rooms/:code/join
 app.use("/rooms",  gameRouter);     // POST /rooms/:code/game|start|answer|vote|match|round/*
 app.use("/rooms",  arcadeRouter);   // POST /rooms/:code/draw/*|wordbomb|reaction|bomberman/*
+app.use("/rooms",  voiceRouter);    // POST /rooms/:code/voice/join|leave|offer|answer|ice
 
 // ── Start server ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;

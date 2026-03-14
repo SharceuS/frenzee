@@ -139,3 +139,10 @@ export async function apiMafiaDetectiveCheck(code: string, playerId: string, tar
 export async function apiMafiaDayStart(code: string, playerId: string) {
   return post<{ ok: boolean; error?: string }>(`/rooms/${code}/mafia/day-start`, { playerId });
 }
+
+// ── Session restore ───────────────────────────────────────────────────────────
+export async function apiResumeRoom(code: string, playerId: string) {
+  return post<{ ok: boolean; room?: import("./types").Room; error?: string }>(
+    `/rooms/${code.toUpperCase()}/resume`, { playerId }
+  );
+}

@@ -32,7 +32,10 @@ export default function MicPill({ micEnabled, micMuted, micPermission, onToggleE
     }
 
     const handleClick = () => {
-        if (denied) return;
+        if (denied) {
+            onToggleEnable();
+            return;
+        }
         if (!micEnabled) {
             onToggleEnable();
         } else {

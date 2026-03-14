@@ -7,7 +7,7 @@ import {
   apiNextRound, apiPlayAgain,
   apiSpyfallDiscuss, apiSpyfallAccuse, apiSpyfallGuess,
   apiMafiaNightKill, apiMafiaDoctorSave, apiMafiaDetectiveCheck, apiMafiaDayStart,
-  apiUpdateProfile, apiUpdateMic,
+  apiUpdateProfile, apiResumeRoom,
 } from "@/lib/api";
 import { Room, Phase, SpyfallRole, MafiaRole, DetectiveResult } from "@/lib/types";
 import { AnimatePresence, motion } from "framer-motion";
@@ -32,6 +32,7 @@ import BingoScreen from "./screens/BingoScreen";
 import SpyfallScreen from "./screens/SpyfallScreen";
 import MafiaScreen from "./screens/MafiaScreen";
 import MicPill from "@/components/MicPill";
+import { useVoice } from "@/lib/voice";
 
 const variants = {
     initial: { opacity: 0, y: 40, scale: 0.97 },
@@ -69,12 +70,16 @@ export default function GameApp() {
     const [errorMsg, setErrorMsg] = useState("");
     const [playerLeftMsg, setPlayerLeftMsg] = useState("");
     const [isConnectingRoom, setIsConnectingRoom] = useState(false);
+    const [sessionChecked, setSessionChecked] = useState(false);
     const prevPlayersRef = useRef<Map<string, string>>(new Map());
 
-    // ── Mic state ─────────────────────────────────────────────────────────────
-    const [micEnabled, setMicEnabled] = useState(false);
-    const [micMuted, setMicMuted] = useState(true);
-    const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
+    // ── Mic / voice state (managed by useVoice hook) ─────────────────────────
+    const {
+        micEnabled, micMuted, micPermission,
+        toggleVoice, toggleMute, leaveVoice,
+        onVoicePeerJoined, onVoicePeerLeft,
+        onVoiceOffer, onVoiceAnswer, onVoiceIceCandidate,
+    } = useVoice(room?.code ?? "", myId);
 
     const phase: Phase = room?.phase ?? "home";
     const isHost = room?.host === myId;
@@ -102,6 +107,11 @@ export default function GameApp() {
         on("your_mafia_role", onMafiaRole);
         on("detective_result", onDetectiveResult);
         on("error_msg", onError);
+        on("voice_peer_joined", onVoicePeerJoined);
+        on("voice_peer_left", onVoicePeerLeft);
+        on("voice_offer", onVoiceOffer);
+        on("voice_answer", onVoiceAnswer);
+        on("voice_ice_candidate", onVoiceIceCandidate);
         return () => {
             off("room_update", onRoom);
             off("player_left", onPlayerLeft);
@@ -111,8 +121,13 @@ export default function GameApp() {
             off("your_mafia_role", onMafiaRole);
             off("detective_result", onDetectiveResult);
             off("error_msg", onError);
+            off("voice_peer_joined", onVoicePeerJoined);
+            off("voice_peer_left", onVoicePeerLeft);
+            off("voice_offer", onVoiceOffer);
+            off("voice_answer", onVoiceAnswer);
+            off("voice_ice_candidate", onVoiceIceCandidate);
         };
-    }, [on, off, myId]);
+    }, [on, off, myId, onVoicePeerJoined, onVoicePeerLeft, onVoiceOffer, onVoiceAnswer, onVoiceIceCandidate]);
 
     // ── Track current roster for future room transitions only ─────────────────
     useEffect(() => {
@@ -124,6 +139,38 @@ export default function GameApp() {
         if (connected) setIsConnectingRoom(false);
     }, [connected]);
 
+    // ── Session restore on mount (reload / mobile background) ────────────────
+    useEffect(() => {
+        const raw = typeof window !== "undefined" ? localStorage.getItem("frenzee_session") : null;
+        if (!raw) { setSessionChecked(true); return; }
+        let parsed: { code: string; playerId: string } | null = null;
+        try { parsed = JSON.parse(raw); } catch { /* malformed */ }
+        if (!parsed?.code || !parsed?.playerId) {
+            localStorage.removeItem("frenzee_session");
+            setSessionChecked(true);
+            return;
+        }
+        const { code: savedCode, playerId: savedId } = parsed;
+        apiResumeRoom(savedCode, savedId)
+            .then(res => {
+                if (res.ok && res.room) {
+                    setMyId(savedId);
+                    setRoom(res.room);
+                    prevPlayersRef.current = new Map(res.room.players.map(p => [p.id, p.name]));
+                    connect(savedCode, savedId);
+                } else {
+                    localStorage.removeItem("frenzee_session");
+                }
+            })
+            .catch(() => { localStorage.removeItem("frenzee_session"); })
+            .finally(() => { setSessionChecked(true); });
+    }, [connect]); // connect is stable — mount-only session check
+
+    // Keep local mic state in sync with the canonical room player payload.
+    // NOTE: with useVoice managing mic lifecycle, this only reads initial state
+    // for the permission indicator when re-joining a room mid-session.
+    // Actual mic enable/mute state is owned by useVoice.
+
     // ── Game cancel when not enough players (FE-CS-03) ────────────────────────
     useEffect(() => {
         if (!room || !room.gameType) return;
@@ -131,6 +178,8 @@ export default function GameApp() {
         if (ACTIVE_GAME_PHASES.has(phase) && room.players.length < minP) {
             setErrorMsg("Not enough players! Returning to home…");
             const t = setTimeout(() => {
+                localStorage.removeItem("frenzee_session");
+                leaveVoice();
                 disconnect();
                 setRoom(null);
                 setMyId("");
@@ -141,7 +190,7 @@ export default function GameApp() {
             }, 2800);
             return () => clearTimeout(t);
         }
-    }, [room?.players.length, phase, disconnect]);
+    }, [room?.players.length, phase, disconnect, leaveVoice]);
 
     // ── Disbanded room handler (FE-CS-01 / host-left / server-kicked) ─────────
     useEffect(() => {
@@ -154,6 +203,8 @@ export default function GameApp() {
                 : "Room closed. Returning to home…";
         setErrorMsg(msg);
         const t = setTimeout(() => {
+            localStorage.removeItem("frenzee_session");
+            leaveVoice();
             disconnect();
             setRoom(null);
             setMyId("");
@@ -165,7 +216,7 @@ export default function GameApp() {
             setErrorMsg("");
         }, 2800);
         return () => clearTimeout(t);
-    }, [phase, room?.disbandReason, disconnect]);
+    }, [phase, room?.disbandReason, disconnect, leaveVoice]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
     const createRoom = useCallback(async (name: string, avatar: import("@/lib/types").AvatarConfig) => {
@@ -255,33 +306,9 @@ export default function GameApp() {
         if (room) { setMyRole(null); setMyDebateRole(null); setMySpyfallRole(null); setMyMafiaRole(null); setDetectiveResult(null); apiPlayAgain(room.code, myId); }
     }, [room, myId]);
 
-    // ── Mic handlers ─────────────────────────────────────────────────────────
-    const handleToggleMic = useCallback(async () => {
-        if (!room) return;
-        if (!micEnabled) {
-            try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                setMicEnabled(true);
-                setMicMuted(false);
-                setMicPermission("granted");
-                apiUpdateMic(room.code, myId, true, false, "granted");
-            } catch {
-                setMicPermission("denied");
-                apiUpdateMic(room.code, myId, false, true, "denied");
-            }
-        } else {
-            setMicEnabled(false);
-            setMicMuted(true);
-            apiUpdateMic(room.code, myId, false, true, micPermission);
-        }
-    }, [room, myId, micEnabled, micPermission]);
-
-    const handleToggleMute = useCallback(() => {
-        if (!room || !micEnabled) return;
-        const next = !micMuted;
-        setMicMuted(next);
-        apiUpdateMic(room.code, myId, true, next, "granted");
-    }, [room, myId, micEnabled, micMuted]);
+    // ── Mic handlers (delegate to useVoice) ──────────────────────────────────
+    const handleToggleMic = toggleVoice;
+    const handleToggleMute = toggleMute;
 
     const handleUpdateProfile = useCallback(async (avatar: import("@/lib/types").AvatarConfig) => {
         if (!room) return;
@@ -304,10 +331,13 @@ export default function GameApp() {
             : `${phase}-${gt}-${room?.round ?? 0}`;
     const binaryAnswerGames = ["never_have_i_ever", "would_you_rather", "hot_takes", "pick_your_poison"];
 
+    // Wait for initial session check to avoid flashing the home screen on reload
+    if (!sessionChecked) return null;
+
     return (
         <div className="relative" style={{ isolation: "isolate" }}>
             {/* Floating mic pill for active game phases */}
-            {micEnabled && ACTIVE_GAME_PHASES.has(phase) && (
+            {ACTIVE_GAME_PHASES.has(phase) && (
                 <div style={{ position: "fixed", bottom: 80, right: 16, zIndex: 45 }}>
                     <MicPill
                         micEnabled={micEnabled}
@@ -323,17 +353,25 @@ export default function GameApp() {
                 {errorMsg && (
                     <motion.div
                         initial={{ opacity: 0, y: -60 }} animate={{ opacity: 1, y: 16 }} exit={{ opacity: 0, y: -60 }}
-                        className="fixed top-0 left-1/2 -translate-x-1/2 z-50 
-                          bg-red-500 text-white font-fredoka text-lg px-6 py-3 rounded-2xl shadow-2xl pointer-events-none"
-                    >⚠️ {errorMsg}</motion.div>
+                        className="fixed top-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                        style={{ width: "calc(100vw - 40px)", maxWidth: 380 }}
+                    >
+                        <div className="w-full bg-red-500 text-white font-fredoka text-lg px-6 py-3 rounded-2xl shadow-2xl text-center">
+                            ⚠️ {errorMsg}
+                        </div>
+                    </motion.div>
                 )}
                 {playerLeftMsg && !errorMsg && (
                     <motion.div
                         key="player-left"
                         initial={{ opacity: 0, y: -60 }} animate={{ opacity: 1, y: 16 }} exit={{ opacity: 0, y: -60 }}
-                        className="fixed top-0 left-1/2 -translate-x-1/2 z-50 
-                          bg-gray-700 text-white font-fredoka text-base px-6 py-3 rounded-2xl shadow-xl pointer-events-none"
-                    >👋 {playerLeftMsg}</motion.div>
+                        className="fixed top-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                        style={{ width: "calc(100vw - 40px)", maxWidth: 380 }}
+                    >
+                        <div className="w-full bg-gray-700 text-white font-fredoka text-base px-6 py-3 rounded-2xl shadow-xl text-center">
+                            👋 {playerLeftMsg}
+                        </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 

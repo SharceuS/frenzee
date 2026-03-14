@@ -4,6 +4,45 @@ const streams = new Map();
 
 const SSE_HEARTBEAT_MS = 25000;
 
+// ── Reconnect grace window ────────────────────────────────────────────────────
+// How long (ms) to wait before treating an SSE close as a real disconnect.
+// Covers background/tab-switch/phone-lock on mobile.
+const RECONNECT_GRACE_MS = 60_000; // 60 seconds
+
+// pendingDisconnects: Map<roomCode, Map<playerId, TimeoutId>>
+const pendingDisconnects = new Map();
+
+/**
+ * Schedule a pending disconnect for a player.
+ * onExpire is called when the timer fires (= real disconnect).
+ * If a pending entry already exists for this player it is replaced.
+ */
+function schedulePendingDisconnect(code, playerId, onExpire) {
+  if (!pendingDisconnects.has(code)) pendingDisconnects.set(code, new Map());
+  const map = pendingDisconnects.get(code);
+  // Clear any existing timer before replacing.
+  if (map.has(playerId)) clearTimeout(map.get(playerId));
+  const timer = setTimeout(() => {
+    const m = pendingDisconnects.get(code);
+    if (m) { m.delete(playerId); if (m.size === 0) pendingDisconnects.delete(code); }
+    onExpire();
+  }, RECONNECT_GRACE_MS);
+  map.set(playerId, timer);
+}
+
+/**
+ * Cancel a pending disconnect (called when player reconnects in time).
+ * Returns true if a pending timer was found and cancelled.
+ */
+function cancelPendingDisconnect(code, playerId) {
+  const map = pendingDisconnects.get(code);
+  if (!map || !map.has(playerId)) return false;
+  clearTimeout(map.get(playerId));
+  map.delete(playerId);
+  if (map.size === 0) pendingDisconnects.delete(code);
+  return true;
+}
+
 /**
  * Register an SSE response for a player in a room and start heartbeat.
  * Returns cleanup fn (called on disconnect).
@@ -58,4 +97,8 @@ function sseCount(code) {
   return streams.get(code)?.size ?? 0;
 }
 
-module.exports = { sseAdd, sseBroadcast, sseSend, sseCount };
+module.exports = {
+  sseAdd, sseBroadcast, sseSend, sseCount,
+  schedulePendingDisconnect, cancelPendingDisconnect,
+};
+

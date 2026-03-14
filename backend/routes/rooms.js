@@ -71,4 +71,19 @@ router.post("/:code/mic", (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /rooms/:code/resume  — validate a saved session on app boot
+// Returns the sanitized room payload if { code, playerId } is still valid.
+// The client calls this before opening a new SSE stream to confirm the
+// stored session has not been expired by a completed grace-window disconnect.
+router.post("/:code/resume", (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const { playerId } = req.body;
+  if (!playerId) return res.status(400).json({ ok: false, error: "playerId required" });
+  const room = getRoom(code);
+  if (!room) return res.status(404).json({ ok: false, error: "Room not found" });
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) return res.status(403).json({ ok: false, error: "Session expired or not a member" });
+  res.json({ ok: true, room: sanitize(room) });
+});
+
 module.exports = router;
