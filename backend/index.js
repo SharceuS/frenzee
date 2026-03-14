@@ -26,6 +26,7 @@ app.use("/rooms",  roomsRouter);    // POST /rooms, POST /rooms/:code/join
 app.use("/rooms",  gameRouter);     // POST /rooms/:code/game|start|answer|vote|match|round/*
 app.use("/rooms",  arcadeRouter);   // POST /rooms/:code/draw/*|wordbomb|reaction|bomberman/*
 app.use("/rooms",  voiceRouter);    // POST /rooms/:code/voice/join|leave|offer|answer|ice
+app.use("/",       voiceRouter);    // GET  /voice/config
 
 // ── Start server ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;

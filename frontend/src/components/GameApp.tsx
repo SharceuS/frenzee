@@ -76,6 +76,7 @@ export default function GameApp() {
     // ── Mic / voice state (managed by useVoice hook) ─────────────────────────
     const {
         micEnabled, micMuted, micPermission,
+        blockedAudioCount, retryBlockedAudio,
         toggleVoice, toggleMute, leaveVoice,
         onVoicePeerJoined, onVoicePeerLeft,
         onVoiceOffer, onVoiceAnswer, onVoiceIceCandidate,
@@ -336,6 +337,23 @@ export default function GameApp() {
 
     return (
         <div className="relative" style={{ isolation: "isolate" }}>
+            {/* Autoplay recovery banner — shown when browser blocks remote audio */}
+            {blockedAudioCount > 0 && (
+                <button
+                    onClick={retryBlockedAudio}
+                    style={{
+                        position: "fixed", bottom: 136, left: "50%", transform: "translateX(-50%)",
+                        background: "rgba(255,200,40,0.95)", color: "#1a1a1a",
+                        fontFamily: "var(--font-fredoka)", fontSize: 13, fontWeight: 600,
+                        padding: "7px 20px", borderRadius: 20, zIndex: 46,
+                        border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
+                    }}
+                >
+                    👂 Tap to enable audio
+                </button>
+            )}
+
             {/* Floating mic pill for active game phases */}
             {ACTIVE_GAME_PHASES.has(phase) && (
                 <div style={{ position: "fixed", bottom: 80, right: 16, zIndex: 45 }}>

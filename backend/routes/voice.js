@@ -8,6 +8,37 @@ const { broadcast } = require("../games/rounds");
 
 const router = Router();
 
+// ── ICE / TURN Configuration ──────────────────────────────────────────────────
+// Environment variables (set in production):
+//   STUN_URL      e.g. stun:stun.l.google.com:19302  (default if absent)
+//   TURN_URL      e.g. turn:your-turn-server.example.com:3478
+//   TURN_USERNAME  TURN credential username
+//   TURN_CREDENTIAL  TURN credential password
+//
+// In development, only the public STUN fallback is used.
+// In production, supply all four env vars for a COTURN or managed TURN relay.
+function buildIceServers() {
+  const servers = [
+    { urls: process.env.STUN_URL || "stun:stun.l.google.com:19302" },
+  ];
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    servers.push({
+      urls: process.env.TURN_URL,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+  return servers;
+}
+
+// ── GET /voice/config ──────────────────────────────────────────────────────────
+// Returns RTCConfiguration-compatible ICE server list.
+// No auth required — the config contains no room-specific secrets.
+// TURN credentials embedded here are short-lived in production deployments.
+router.get("/voice/config", (req, res) => {
+  res.json({ ok: true, iceServers: buildIceServers() });
+});
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 function resolveRoom(req, res) {
@@ -37,9 +68,10 @@ router.post("/:code/voice/join", (req, res) => {
   room.voiceParticipantIds.push(playerId);
 
   // Notify each existing participant so they can initiate offer/answer exchange.
+  const ts = Date.now();
   const others = room.voiceParticipantIds.filter(id => id !== playerId);
   for (const peerId of others) {
-    sseSend(code, peerId, "voice_peer_joined", { fromPlayerId: playerId });
+    sseSend(code, peerId, "voice_peer_joined", { fromPlayerId: playerId, ts });
   }
 
   // Broadcast updated room state (voiceParticipantIds changed).
@@ -58,8 +90,9 @@ router.post("/:code/voice/leave", (req, res) => {
   room.voiceParticipantIds = room.voiceParticipantIds.filter(id => id !== playerId);
 
   // Notify remaining participants.
+  const ts = Date.now();
   for (const peerId of room.voiceParticipantIds) {
-    sseSend(code, peerId, "voice_peer_left", { fromPlayerId: playerId });
+    sseSend(code, peerId, "voice_peer_left", { fromPlayerId: playerId, ts });
   }
 
   broadcast(code);
@@ -84,7 +117,7 @@ router.post("/:code/voice/offer", (req, res) => {
     return res.status(404).json({ ok: false, error: "Target player not in room" });
   }
 
-  sseSend(code, toPlayerId, "voice_offer", { fromPlayerId: playerId, toPlayerId, sdp });
+  sseSend(code, toPlayerId, "voice_offer", { fromPlayerId: playerId, toPlayerId, sdp, ts: Date.now() });
   res.json({ ok: true });
 });
 
@@ -106,7 +139,7 @@ router.post("/:code/voice/answer", (req, res) => {
     return res.status(404).json({ ok: false, error: "Target player not in room" });
   }
 
-  sseSend(code, toPlayerId, "voice_answer", { fromPlayerId: playerId, toPlayerId, sdp });
+  sseSend(code, toPlayerId, "voice_answer", { fromPlayerId: playerId, toPlayerId, sdp, ts: Date.now() });
   res.json({ ok: true });
 });
 
@@ -128,8 +161,9 @@ router.post("/:code/voice/ice", (req, res) => {
     return res.status(404).json({ ok: false, error: "Target player not in room" });
   }
 
-  sseSend(code, toPlayerId, "voice_ice_candidate", { fromPlayerId: playerId, toPlayerId, candidate });
+  sseSend(code, toPlayerId, "voice_ice_candidate", { fromPlayerId: playerId, toPlayerId, candidate, ts: Date.now() });
   res.json({ ok: true });
 });
 
 module.exports = router;
+

@@ -21,7 +21,16 @@ router.get("/:code", (req, res) => {
   // ── Cancel any pending grace-window disconnect for this player ────────────
   // This covers mobile reconnects: the old stream closed but the grace timer
   // had not fired yet, so the player is still a room member.
-  cancelPendingDisconnect(code, playerId);
+  const wasReconnect = cancelPendingDisconnect(code, playerId);
+
+  // If this is a reconnect and the player was in the voice participant set,
+  // notify remaining voice peers so they can re-initiate WebRTC negotiation.
+  if (wasReconnect && room.voiceParticipantIds && room.voiceParticipantIds.includes(playerId)) {
+    const ts = Date.now();
+    for (const peerId of room.voiceParticipantIds) {
+      if (peerId !== playerId) sseSend(code, peerId, "voice_peer_joined", { fromPlayerId: playerId, ts, reconnect: true });
+    }
+  }
 
   // SSE headers
   res.set({
